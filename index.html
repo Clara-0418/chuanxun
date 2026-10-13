@@ -6885,7 +6885,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">每条消息都显示头像</span><input type="checkbox" id="alwaysShowAvatarToggle" style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">开启后每条消息旁都显示头像，类似微信/QQ风格</div></div>
                 <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">后台保活 (iOS优化)</span><input type="checkbox" id="keepAliveToggle" checked style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">通过定时脉冲维持页面活跃，适配iOS后台限制</div></div>
                 <!-- 灵动岛音频占位 -->
-                <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">🔊 灵动岛音频占位</span><input type="checkbox" id="dynamicIslandAudioToggle" checked style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">后台时在灵动岛显示，占用系统音频通道（静音）</div></div>
+                <div style="display:none;padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--text-primary);">后台保活音频（已停用）</span><input type="checkbox" id="dynamicIslandAudioToggle" style="width:16px;height:16px;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">为避免打断其它 App 的播放，不再使用任何后台音频，只保留定时器保活</div></div>
             </div>
             <div class="modal-buttons"><button class="modal-btn modal-btn-secondary" id="closeChatSettings">关闭</button></div>
         </div></div>
@@ -7558,42 +7558,24 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         artwork: art ? [{ src: art, sizes: '180x180', type: 'image/png' }] : []
                     });
                     // 播放/暂停交给页面自己保持（点暂停也继续占位）
-                    try { navigator.mediaSession.setActionHandler('play', () => { try { ensureBackgroundAudio().play().catch(() => {}); } catch (e) {} }); } catch (e) {}
-                    try { navigator.mediaSession.setActionHandler('pause', () => { try { ensureBackgroundAudio().play().catch(() => {}); } catch (e) {} }); } catch (e) {}
+                    try { navigator.mediaSession.setActionHandler('play', () => {}); } catch (e) {}
+                    try { navigator.mediaSession.setActionHandler('pause', () => {}); } catch (e) {}
                     navigator.mediaSession.playbackState = 'playing';
                 } catch (e) {}
             }
 
+            // 后台保活：不再使用任何音频。
+            // 以前会用"静音媒体元素"或"超低频 WebAudio 振荡器"去占住系统音频通道，
+            // 结果就是打断用户在其它 App 里正在播放的音乐 —— 按要求彻底移除，只保留定时器保活。
             function startDynamicIslandAudio() {
-                if (!settings.dynamicIslandAudio) {
-                    stopDynamicIslandAudio();
-                    return;
-                }
-                // 保活只允许"混音"方式，绝不强占前台音频通道：
-                // 支持 Audio Session API（iOS 16.4+）时才用静音媒体元素并设为 ambient（可与其它音频同时播放）；
-                // 不支持就什么都不做 —— 宁可没有锁屏保活，也不打断用户正在听的音乐。
                 try {
-                    if (navigator.audioSession) {
-                        try { navigator.audioSession.type = 'ambient'; } catch (e) {}
-                        const a = ensureBackgroundAudio();
-                        if (a && a.paused) {
-                            const pr = a.play();
-                            if (pr && pr.catch) pr.catch(() => {});
-                        }
-                        updateMediaSession();
-                        audioScheduled = true;
-                    } else {
-                        if (bgAudio) { try { bgAudio.pause(); } catch (e) {} }
-                        if (navigator.mediaSession) {
-                            try { navigator.mediaSession.playbackState = 'none'; } catch (e) {}
-                            try { navigator.mediaSession.metadata = null; } catch (e) {}
-                        }
-                        if (audioOsc) { try { audioOsc.stop(); } catch (e) {} try { audioOsc.disconnect(); } catch (e) {} audioOsc = null; }
-                        if (audioGain) { try { audioGain.disconnect(); } catch (e) {} audioGain = null; }
-                        if (audioCtx && audioCtx.state !== 'closed') { try { audioCtx.close(); } catch (e) {} }
-                        audioCtx = null;
-                        audioScheduled = false;
-                    }
+                    if (bgAudio) { try { bgAudio.pause(); } catch (e) {} }
+                    if (audioOsc) { try { audioOsc.stop(); } catch (e) {} try { audioOsc.disconnect(); } catch (e) {} audioOsc = null; }
+                    if (audioGain) { try { audioGain.disconnect(); } catch (e) {} audioGain = null; }
+                    if (audioCtx && audioCtx.state !== 'closed') { try { audioCtx.close(); } catch (e) {} }
+                    audioCtx = null;
+                    audioScheduled = false;
+                    if (navigator.mediaSession) { try { navigator.mediaSession.playbackState = 'none'; } catch (e) {} }
                 } catch (e) {}
             }
 
@@ -11208,7 +11190,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         .dynamicIslandAudio = e.target.checked;
                     saveData();
                     startDynamicIslandAudio();
-                    showNotification(settings.dynamicIslandAudio ? '🔊 灵动岛音频占位已开启' :
+                    showNotification(settings.dynamicIslandAudio ? '后台保活音频已停用（不会打断其它 App）' :
                         '🔇 灵动岛音频占位已关闭', 'success'); });
 
                 // 字卡库
