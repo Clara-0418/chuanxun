@@ -3904,7 +3904,7 @@
             text-size-adjust: 100%;
             height: 100%;
         }
-        html, body { overflow-x: hidden; }
+        html, body { height: 100%; max-height: 100%; overflow: hidden; overscroll-behavior: none; }
         body {
             height: 100dvh; /* 支持时用动态视口高度，避开 iOS 地址栏抖动；不支持则回退 100vh */
             min-height: 100%;
@@ -5998,9 +5998,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         body:not(.home-active) .home-back-top { display: none !important; }
 
         /* ===== 主页全屏背景：内容区透明，背景才能一直铺到最下面 ===== */
-        body.lov-home-bg-full #homePage.active {
-            background: transparent !important; background-image: none !important; background-color: transparent !important;
-        }
+
 
         /* ===== 纪念日做成放大版小部件；去掉「我们的空间」文字 ===== */
         #homePage .home-section-title {
@@ -6233,7 +6231,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             <button class="modal-btn modal-btn-secondary" id="statusClearBtn" style="flex:1;">恢复在线</button>
         </div>
         <div style="margin-top:16px;font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">梦角的状态</div>
-        <div class="status-grid" id="partnerStatusGrid"></div>
+        <div style="display:none;"><div class="status-grid" id="partnerStatusGrid"></div></div>
         <div class="modal-buttons"><button class="modal-btn modal-btn-secondary" id="statusCloseBtn">关闭</button></div>
     </div></div>
 
@@ -11506,15 +11504,10 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 myAvatar.addEventListener('click', () => editAvatar('me'));
                 partnerName.addEventListener('click', () => editName('partner'));
                 myName.addEventListener('click', () => editName('me'));
-                partnerStatus.addEventListener('click', async () => {
-                    if (settings.isBlocked) { showNotification('对方已被拉黑', 'warning'); return; }
-                    const current = partnerStatus.querySelector('span').textContent;
-                    const val = await iosPrompt('更新梦角的状态：', { value: current, title: '梦角的状态' });
-                    if (val !== null && val.trim()) { settings.partnerStatus = val.trim();
-                        partnerStatus.querySelector('span').textContent = settings.partnerStatus;
-                        saveData(); }
-                });
-                messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e
+                            partnerStatus.addEventListener('click', () => {
+                // 按要求：梦角的状态只能由「状态字卡库」自动抽取更新，不允许用户自定义修改
+                showNotification('梦角的状态会从状态字卡库自动更新，不能手动修改', 'info', 2400);
+            });                messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e
                         .preventDefault();
                         sendMessage(); } });
 
@@ -12478,7 +12471,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
  */
 (function() {
     'use strict';
-    var LOV_OVERLAY_MAX = 80, LOV_IMG_LIMIT = 3 * 1024, LOV_MAX_TEXT = 2000, LOV_MAX_CMT = 300, LOV_MAX_CMTS = 50, LOV_MAX_CARD = 220;
+    var LOV_OVERLAY_MAX = 80, LOV_IMG_LIMIT = 10 * 1024 * 1024, LOV_MAX_TEXT = 2000, LOV_MAX_CMT = 300, LOV_MAX_CMTS = 50, LOV_MAX_CARD = 220;
     var LOV_POST_RATE = 0.45, LOV_CMT_RATE = 0.3, LOV_CMT_MIN_MS = 10 * 1000, LOV_CMT_MAX_MS = 60 * 1000, LOV_CARD_MIN = 8, LOV_CARD_MAX = 15;
     var LOV_CMT_TRACK_DAYS = 14;   // 补判定的时间窗：只看最近 14 天我写的日记
     var lovEditingId = null, lovEditAuthor = 'me', lovRand = Math.random, lovRand2 = Math.random, lovTab = 'me', lovCmtSeeded = false, lovLastCards = [];   // lovRand/lovRand2 供桩环境替换
@@ -12903,10 +12896,36 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         if (typeof FileReader === 'undefined') { cb(null); return; }
         try { var rd = new FileReader(); rd.onload = function(e) { cb(e && e.target ? e.target.result : null); }; rd.onerror = function() { cb(null); }; rd.readAsDataURL(file); } catch (e) { cb(null); }
     }
-    function lovHandleFile(input, target) {   // 上传图片 ≤3KB -> dataURL
+    // 背景图压缩：最长边压到 1600px 的 JPEG（GIF 原样保留）。
+    // 用户上传 10MB 原图也没关系，存进浏览器的只有几百 KB，不会撑爆存储。
+    function lovCompressImage(file, cb) {
+        var isGif = /image\/gif/i.test(file.type || '');
+        if (isGif || typeof document === 'undefined' || !document.createElement || typeof Image === 'undefined') { lovReadImage(file, cb); return; }
+        var url;
+        try { url = URL.createObjectURL(file); } catch (e) { lovReadImage(file, cb); return; }
+        var image = new Image();
+        image.onload = function () {
+            try {
+                var MAX = 1600, w = image.naturalWidth || image.width, h = image.naturalHeight || image.height;
+                if (!w || !h) { try { URL.revokeObjectURL(url); } catch (e) {} lovReadImage(file, cb); return; }
+                var sc = Math.min(1, MAX / Math.max(w, h));
+                w = Math.max(1, Math.round(w * sc)); h = Math.max(1, Math.round(h * sc));
+                var cv = document.createElement('canvas');
+                cv.width = w; cv.height = h;
+                cv.getContext('2d').drawImage(image, 0, 0, w, h);
+                var out = null;
+                try { out = cv.toDataURL('image/jpeg', 0.82); } catch (e) { out = null; }
+                try { URL.revokeObjectURL(url); } catch (e) {}
+                if (out && out.length > 100) cb(out); else lovReadImage(file, cb);
+            } catch (e) { try { URL.revokeObjectURL(url); } catch (e2) {} lovReadImage(file, cb); }
+        };
+        image.onerror = function () { try { URL.revokeObjectURL(url); } catch (e) {} lovReadImage(file, cb); };
+        image.src = url;
+    }
+    function lovHandleFile(input, target) {   // 上传图片（≤10MB，自动压缩后存为 dataURL）
         var file = (input && input.files) ? input.files[0] : null; if (input) input.value = ''; if (!file) return;
-        if (file.size > LOV_IMG_LIMIT) { lovAlert('背景图不能超过 3KB，换一张小一点的吧', { title: '图片太大' }); return; }
-        lovReadImage(file, function(src) { var img = lovImg(src); if (!img) { lovNotify('这张图读不出来，换一张试试', 'error'); return; } lovSetBg(target, { image: img }); lovNotify('背景已更新', 'success'); });
+        if (file.size > LOV_IMG_LIMIT) { lovAlert('背景图不能超过 10MB，换一张小一点的吧', { title: '图片太大' }); return; }
+        lovCompressImage(file, function(src) { var img = lovImg(src); if (!img) { lovNotify('这张图读不出来，换一张试试', 'error'); return; } lovSetBg(target, { image: img }); lovNotify('背景已更新', 'success'); });
     }
     function lovAskOverlay(target, cur) {
         lovPrompt('蒙层不透明度（0 - 80）', { title: '调整蒙层', value: String(cur), placeholder: '0 - 80' }).then(function(v) {
@@ -12919,7 +12938,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     }
     function lovPickBg(target) {   // 上传图片 / 4 个纯色预设 / 蒙层 0-80 / 恢复默认
         var cur = (target === 'home') ? lovBg(lovData().homePageBg) : (target === 'together') ? lovBg(lovData().togetherBg) : lovState().bg;
-        var items = [{ label: '上传图片（3KB 以内）', value: 'upload' }], title = (target === 'home') ? '更换主页背景' : (target === 'together') ? '更换你我之间背景' : '更换恋爱日记背景';
+        var items = [{ label: '上传图片（10MB 以内，会自动压缩）', value: 'upload' }], title = (target === 'home') ? '更换主页背景' : (target === 'together') ? '更换你我之间背景' : '更换恋爱日记背景';
         LOV_COLORS.forEach(function(c) { items.push({ label: '纯色 · ' + c.label, value: 'color:' + c.color }); });
         items.push({ label: '调整蒙层（当前 ' + cur.overlay + '）', value: 'overlay' }, { label: '恢复默认背景', value: 'reset', destructive: true });
         lovSheet(title, items).then(function(val) {
@@ -14799,7 +14818,7 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
     'use strict';
 
     // ===== 常量 =====
-    var BG_LIMIT = 3 * 1024 * 1024;         // 背景图上限 3MB
+    var BG_LIMIT = 10 * 1024 * 1024;         // 背景图上限 3MB
     var AUDIO_LIMIT = 5 * 1024 * 1024;      // 自定义音频上限 5MB
     var OVERLAY_MAX = 80;                   // 蒙层不透明度上限（%）
     var IDLE_MIN = 30, IDLE_MAX = 70;       // 陪伴中梦角主动说话的间隔（秒）
