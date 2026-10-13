@@ -5977,6 +5977,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .message.red-packet-message::after { display: none !important; }
         .message.red-packet-message .rp-bubble { margin: 0 auto; }
 
+        /* ===== 主页全屏背景层（铺满整个视口，含顶部栏后面） ===== */
+        #lovHomeBgLayer {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none; display: none;
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+        }
+        body.lov-home-bg-full .header { background: transparent !important; border-bottom-color: transparent !important; }
+        body.lov-home-bg-full #homePage.active { position: relative; z-index: 1; background-color: transparent !important; }
+        body.lov-home-bg-full #homePage.active > * { position: relative; z-index: 1; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -12806,11 +12815,50 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         b = lovBg(lovData().homePageBg); doc = (typeof document !== 'undefined') ? document : null;
         dark = !!(doc && doc.documentElement && doc.documentElement.getAttribute('data-theme') === 'dark'); panel = b.image ? (dark ? 'rgba(20,20,20,0.55)' : 'rgba(255,255,255,0.72)') : '';
         lovApplyBg(page, b, false); if (b.image || b.color) page.style.position = 'relative';
+        lovApplyHomeBgFull(b, page);   // 铺满整个视口（含顶部栏后面）
         grid = lovEl('homeFeatureGrid'); title = lovQS('#homePage .home-section-title');   // 卡片区垫半透明蒙层，保证文字可读
         if (grid) { grid.style.background = panel; grid.style.borderRadius = panel ? '12px' : ''; } if (title) { title.style.background = panel; title.style.borderRadius = panel ? '999px' : ''; }
         return true;
     }
-    function lovApplyAllBg() { lovApplyBg(lovEl('lovDiaryContent'), lovState().bg, true); lovApplyHomeBg(); lovApplyBg(lovQS('#togetherModal .modal-content'), lovData().togetherBg, true); }
+    // ===== 主页全屏背景：用一个 fixed 层铺满整个视口，而不是只铺内容区 =====
+    var lovHomeBgObs = null, lovHomeBgHas = false;
+    function lovApplyHomeBgFull(b, page) {
+        try {
+            var doc = (typeof document !== 'undefined') ? document : null;
+            if (!doc || !doc.body) return false;
+            var layer = doc.getElementById('lovHomeBgLayer');
+            if (!layer) {
+                layer = doc.createElement('div');
+                layer.id = 'lovHomeBgLayer';
+                doc.body.appendChild(layer);
+            }
+            var has = !!(b && (b.image || b.color));
+            lovHomeBgHas = has;   // 状态存在模块变量里，观察器每次都读最新的，避免闭包拿到旧值
+            if (has) {
+                layer.style.backgroundImage = b.image ? (lovScrim(b.overlay) + ', url("' + b.image + '")') : lovScrim(b.overlay);
+                layer.style.backgroundColor = b.color || '';
+                layer.style.backgroundSize = 'cover';
+                layer.style.backgroundPosition = 'center';
+                layer.style.backgroundRepeat = 'no-repeat';
+            } else {
+                layer.style.backgroundImage = '';
+                layer.style.backgroundColor = '';
+            }
+            var sync = function () {
+                var l = doc.getElementById('lovHomeBgLayer');
+                var pg = doc.getElementById('homePage');
+                if (!l) return;
+                var on = lovHomeBgHas && pg && pg.classList && pg.classList.contains('active');
+                l.style.display = on ? 'block' : 'none';
+            };
+            sync();
+            if (page && !lovHomeBgObs && typeof MutationObserver === 'function') {
+                lovHomeBgObs = new MutationObserver(sync);
+                lovHomeBgObs.observe(page, { attributes: true, attributeFilter: ['class'] });
+            }
+            return true;
+        } catch (e) { return false; }
+    }    function lovApplyAllBg() { lovApplyBg(lovEl('lovDiaryContent'), lovState().bg, true); lovApplyHomeBg(); lovApplyBg(lovQS('#togetherModal .modal-content'), lovData().togetherBg, true); }
     function lovSetBg(target, patch) {
         var fd, key, cur, img;
         patch = patch || {}; fd = lovData();
@@ -14286,36 +14334,69 @@ function avlRender() {
     const ch = document.getElementById('avlSwapChance');
     if (ch) ch.value = numOr(settings.avatarSwapChance, 40);
 }
+// 头像统一压到最长边 256px 的 JPEG（GIF 原样保留）。
+// 手机原图动辄 5-10MB，直接存 dataURL 会把浏览器存储配额撑爆，
+// 表现就是"上传成功但刷新后头像没了"。
+function avlCompressToDataUrl(file, cb) {
+    const fallback = function () {
+        const reader = new FileReader();
+        reader.onload = ev => cb(String(ev.target.result));
+        reader.onerror = () => cb(null);
+        reader.readAsDataURL(file);
+    };
+    const isGif = /image\/gif/i.test(file.type);
+    if (isGif || typeof document === 'undefined' || !document.createElement) return fallback();
+    let url;
+    try { url = URL.createObjectURL(file); } catch (e) { return fallback(); }
+    const img = new Image();
+    img.onload = function () {
+        try {
+            const MAX = 256;
+            let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+            if (!w || !h) { try { URL.revokeObjectURL(url); } catch (e) {} return fallback(); }
+            const scale = Math.min(1, MAX / Math.max(w, h));
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+            const cv = document.createElement('canvas');
+            cv.width = w; cv.height = h;
+            const ctx = cv.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            let out = null;
+            try { out = cv.toDataURL('image/jpeg', 0.85); } catch (e) { out = null; }
+            try { URL.revokeObjectURL(url); } catch (e) {}
+            cb(out && out.length > 100 ? out : null);
+        } catch (e) {
+            try { URL.revokeObjectURL(url); } catch (e2) {}
+            cb(null);
+        }
+    };
+    img.onerror = function () { try { URL.revokeObjectURL(url); } catch (e) {} fallback(); };
+    img.src = url;
+}
+
 function avlAddFiles(who, files) {
     const d = avlData();
     const list = Array.from(files || []).filter(f => f && f.type.indexOf('image/') === 0);
-    if (list.length === 0) return;
-    let done = 0, added = 0;
+    if (list.length === 0) { showNotification('请选择图片文件', 'warning'); return; }
+    let done = 0, added = 0, failed = 0;
+    const finish = () => {
+        if (done !== list.length) return;
+        avlSave();
+        avlRender();
+        if (added > 0) showNotification('已添加 ' + added + ' 张头像', 'success');
+        else if (failed > 0) showNotification('图片读取失败，换一张试试', 'warning');
+    };
     list.forEach(file => {
-        if (file.size > 10 * 1024 * 1024) {
-            showNotification(file.name + ' 超过 10MB，已跳过', 'warning');
-            done++;
-            return;
+        if (file.size > 20 * 1024 * 1024) {
+            showNotification(file.name + ' 超过 20MB，已跳过', 'warning');
+            failed++; done++; finish(); return;
         }
-        const reader = new FileReader();
-        reader.onload = ev => {
-            d[who].push(String(ev.target.result));
-            added++;
-            done++;
-            if (done === list.length) {
-                avlSave();
-                avlRender();
-                if (added > 0) showNotification('已添加 ' + added + ' 张头像', 'success');
-            }
-        };
-        reader.onerror = () => {
-            done++;
-            if (done === list.length) { avlSave(); avlRender(); }
-        };
-        reader.readAsDataURL(file);
+        avlCompressToDataUrl(file, dataUrl => {
+            if (dataUrl) { d[who].push(dataUrl); added++; } else { failed++; }
+            done++; finish();
+        });
     });
 }
-
 // 梦角随机换头像：一半「只换自己」，一半「两个人都换」；两个人都换时，一半取相同位置、一半各自随机
 function avlMaybeSwap(force) {
     const d = avlData();
@@ -14372,9 +14453,9 @@ function initAvatarFeature() {
     bind('avlAddPartner', () => document.getElementById('avlFilePartner').click());
     bind('avlClose', () => hideModal(modal));
     const fm = document.getElementById('avlFileMine');
-    if (fm) fm.addEventListener('change', e => { const f = e.target.files; e.target.value = ''; avlAddFiles('mine', f); });
+    if (fm) fm.addEventListener('change', e => { const arr = Array.from(e.target.files || []); e.target.value = ''; avlAddFiles('mine', arr); });
     const fp = document.getElementById('avlFilePartner');
-    if (fp) fp.addEventListener('change', e => { const f = e.target.files; e.target.value = ''; avlAddFiles('partner', f); });
+    if (fp) fp.addEventListener('change', e => { const arr = Array.from(e.target.files || []); e.target.value = ''; avlAddFiles('partner', arr); });
     // 网格：点一下设为当前头像，点右上角 ✕ 删除
     [modal].forEach(host => {
         const grid = host;
@@ -20446,9 +20527,6 @@ function initMusicFeature() {
             node.setAttribute('frameborder', 'no');
             node.setAttribute('framespacing', '0');
             node.setAttribute('allowfullscreen', 'true');
-            // 不发送 Referer：B 站外链播放器对第三方站点的来源校验会因此放宽
-            //（部分视频在第三方 https 站点下必须这样设置才会真正出画面）
-            node.setAttribute('referrerpolicy', 'no-referrer');
         }
         node.setAttribute('src', src);
         wrap.appendChild(node);
