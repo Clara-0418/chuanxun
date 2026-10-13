@@ -5986,6 +5986,35 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         body.lov-home-bg-full #homePage.active { position: relative; z-index: 1; background-color: transparent !important; }
         body.lov-home-bg-full #homePage.active > * { position: relative; z-index: 1; }
 
+        /* ===== 主页 = 独立页面：隐藏聊天顶栏 + 左上角返回键 ===== */
+        body.home-active .header { display: none !important; }
+        .home-back-top {
+            position: fixed !important; top: calc(env(safe-area-inset-top, 0px) + 10px) !important; left: 12px !important; z-index: 60 !important;
+            width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, .88); color: var(--text-primary);
+            font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+        }
+        body:not(.home-active) .home-back-top { display: none !important; }
+
+        /* ===== 主页全屏背景：内容区透明，背景才能一直铺到最下面 ===== */
+        body.lov-home-bg-full #homePage.active {
+            background: transparent !important; background-image: none !important; background-color: transparent !important;
+        }
+
+        /* ===== 纪念日做成放大版小部件；去掉「我们的空间」文字 ===== */
+        #homePage .home-section-title {
+            font-size: 0 !important; color: transparent !important; background: none !important;
+            display: flex !important; justify-content: center !important; align-items: center !important;
+            margin: 2px 0 0 !important; padding: 0 !important; min-height: 0 !important;
+        }
+        #homePage #lovHomeDays {
+            display: inline-block !important; font-size: 19px !important; font-weight: 700 !important;
+            letter-spacing: 1px; color: var(--text-primary) !important;
+            background: rgba(255, 255, 255, .82); border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 12px 22px; margin: 10px 0 18px;
+        }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -7540,11 +7569,11 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     stopDynamicIslandAudio();
                     return;
                 }
-                // 后台保活：只在"允许与其它 App 混音"时才用静音媒体元素，
-                // 否则只用几乎无声的 WebAudio 占位，避免打断用户其它软件正在播的音乐。
+                // 保活只允许"混音"方式，绝不强占前台音频通道：
+                // 支持 Audio Session API（iOS 16.4+）时才用静音媒体元素并设为 ambient（可与其它音频同时播放）；
+                // 不支持就什么都不做 —— 宁可没有锁屏保活，也不打断用户正在听的音乐。
                 try {
                     if (navigator.audioSession) {
-                        // iOS 16.4+ / 支持 Audio Session API：ambient = 可与其他音频混音，不会打断别人
                         try { navigator.audioSession.type = 'ambient'; } catch (e) {}
                         const a = ensureBackgroundAudio();
                         if (a && a.paused) {
@@ -7552,54 +7581,20 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                             if (pr && pr.catch) pr.catch(() => {});
                         }
                         updateMediaSession();
+                        audioScheduled = true;
                     } else {
-                        // 不支持混音控制时，绝不启动会抢占音频会话的媒体元素
                         if (bgAudio) { try { bgAudio.pause(); } catch (e) {} }
-                        if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none';
+                        if (navigator.mediaSession) {
+                            try { navigator.mediaSession.playbackState = 'none'; } catch (e) {}
+                            try { navigator.mediaSession.metadata = null; } catch (e) {}
+                        }
+                        if (audioOsc) { try { audioOsc.stop(); } catch (e) {} try { audioOsc.disconnect(); } catch (e) {} audioOsc = null; }
+                        if (audioGain) { try { audioGain.disconnect(); } catch (e) {} audioGain = null; }
+                        if (audioCtx && audioCtx.state !== 'closed') { try { audioCtx.close(); } catch (e) {} }
+                        audioCtx = null;
+                        audioScheduled = false;
                     }
                 } catch (e) {}
-                // 已经在运行就不要重建节点：applySettings / 保活脉冲会频繁调用本函数
-                if (audioOsc && audioCtx && audioCtx.state !== 'closed') {
-                    if (audioCtx.state === 'suspended') { audioCtx.resume().catch(() => {}); }
-                    return;
-                }
-                try {
-                    if (!audioCtx) {
-                        audioCtx = new(window.AudioContext || window.webkitAudioContext)();
-                    }
-                    if (audioCtx.state === 'suspended') {
-                        audioCtx.resume();
-                    }
-                    // 创建极低音量、极低频的持续音频，用于占用系统音频通道
-                    if (audioOsc) {
-                        try { audioOsc.stop(); } catch (e) {}
-                        audioOsc.disconnect();
-                    }
-                    audioOsc = audioCtx.createOscillator();
-                    audioGain = audioCtx.createGain();
-                    audioOsc.connect(audioGain);
-                    audioGain.connect(audioCtx.destination);
-                    audioOsc.frequency.value = 20; // 超低频，人耳几乎听不到
-                    audioOsc.type = 'sine';
-                    audioGain.gain.value = 0.001; // 极低音量，几乎无声
-                    audioOsc.start();
-                    // 尝试设置 MediaSession
-                    if (navigator.mediaSession) {
-                        navigator.mediaSession.metadata = new MediaMetadata({
-                            title: '纯爱予彻 · 传讯',
-                            artist: settings.partnerName || '梦角',
-                            album: '💕 聊天中',
-                            artwork: [{ src: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23c5a47e"/%3E%3Ctext x="50" y="68" font-size="40" text-anchor="middle" fill="white" font-family="serif"%3E❤%3C/text%3E%3C/svg%3E',
-                                    sizes: '100x100', type: 'image/svg+xml' }]
-                        });
-                        navigator.mediaSession.setActionHandler('play', () => {});
-                        navigator.mediaSession.setActionHandler('pause', () => {});
-                    }
-                    audioScheduled = true;
-                } catch (e) {
-                    // 静默失败
-                    audioScheduled = false;
-                }
             }
 
             function stopDynamicIslandAudio() {
@@ -10747,12 +10742,14 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     e.preventDefault();
                     chatArea.style.display = 'none';
                     homePage.classList.add('active');
+                    document.body.classList.add('home-active');   // 主页独立页面：隐藏聊天顶栏
                     document.querySelector('.input-area-wrapper').style.display = 'none';
                 });
                 homeBackBtn.addEventListener('click', function(e) {
                     e.preventDefault();
                     chatArea.style.display = 'flex';
                     homePage.classList.remove('active');
+                    document.body.classList.remove('home-active');
                     document.querySelector('.input-area-wrapper').style.display = 'block';
                 });
                 homeBtn.addEventListener('touchend', (e) => { e.preventDefault();
@@ -11759,6 +11756,22 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             function initHomeAndFeatures() {
+                // 主页左上角返回键（主页作为独立页面时，聊天顶栏会被隐藏）
+                try {
+                    if (!document.getElementById('homeBackTopBtn')) {
+                        const hp = document.getElementById('homePage');
+                        if (hp) {
+                            const bb = document.createElement('button');
+                            bb.id = 'homeBackTopBtn';
+                            bb.className = 'home-back-top';
+                            bb.type = 'button';
+                            bb.setAttribute('aria-label', '返回聊天');
+                            bb.textContent = '←';
+                            bb.addEventListener('click', function () { try { homeBackBtn.click(); } catch (e) {} });
+                            hp.appendChild(bb);
+                        }
+                    }
+                } catch (e) {}
                 renderHomeProfile();
                 renderMomentProfile();
                 renderHomeFeatures();
@@ -12834,6 +12847,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
             var has = !!(b && (b.image || b.color));
             lovHomeBgHas = has;   // 状态存在模块变量里，观察器每次都读最新的，避免闭包拿到旧值
+            if (has) doc.body.classList.add('lov-home-bg-full');
+            else doc.body.classList.remove('lov-home-bg-full');
             if (has) {
                 layer.style.backgroundImage = b.image ? (lovScrim(b.overlay) + ', url("' + b.image + '")') : lovScrim(b.overlay);
                 layer.style.backgroundColor = b.color || '';
