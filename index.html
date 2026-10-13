@@ -6885,7 +6885,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">每条消息都显示头像</span><input type="checkbox" id="alwaysShowAvatarToggle" style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">开启后每条消息旁都显示头像，类似微信/QQ风格</div></div>
                 <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">后台保活 (iOS优化)</span><input type="checkbox" id="keepAliveToggle" checked style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">通过定时脉冲维持页面活跃，适配iOS后台限制</div></div>
                 <!-- 灵动岛音频占位 -->
-                <div style="display:none;padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--text-primary);">后台保活音频（已停用）</span><input type="checkbox" id="dynamicIslandAudioToggle" style="width:16px;height:16px;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">为避免打断其它 App 的播放，不再使用任何后台音频，只保留定时器保活</div></div>
+                <div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">后台保活</span><input type="checkbox" id="dynamicIslandAudioToggle" checked style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">默认用「混音」方式保活，不会打断你在其它 App 里看视频/听歌</div></div><div style="padding:6px 10px;background:var(--primary-bg);border-radius:8px;margin-top:6px;"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:500;color:var(--text-primary);">强力保活模式</span><input type="checkbox" id="keepAliveStrongToggle" style="accent-color:var(--accent-color);width:16px;height:16px;cursor:pointer;"></div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">开启后保活更稳，但会占用播放通道、暂停其它 App 的声音，建议只在需要时临时开启</div></div>
             </div>
             <div class="modal-buttons"><button class="modal-btn modal-btn-secondary" id="closeChatSettings">关闭</button></div>
         </div></div>
@@ -7082,7 +7082,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 isBlocked: false,
                 unblockCooldown: false,
                 unblockCooldownTimer: null,
-                dynamicIslandAudio: true, // 新增：灵动岛音频占位
+                dynamicIslandAudio: true, // 后台保活的总开关（默认开）
+                keepAliveStrong: false, // 强力保活：占用播放通道，会打断其它 App（默认关）
             };
 
             let customReplies = ['想你了，今天有好好吃饭吗？', '我一直在你身边哦 ✦', '今天天气很好，就像你的笑容一样', '你是我最珍贵的遇见', '累了就休息一下吧，我陪着你',
@@ -7455,6 +7456,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         if (settings.enableRandomMeme === undefined) settings.enableRandomMeme = true;
                         if (settings.chatBgOverlay === undefined) settings.chatBgOverlay = 0;
                         if (settings.dynamicIslandAudio === undefined) settings.dynamicIslandAudio = true;
+                if (settings.keepAliveStrong === undefined) settings.keepAliveStrong = false;
                         if (settings.momentFreq === undefined) settings.momentFreq = 5;
                         if (settings.momentReplyChance === undefined) settings.momentReplyChance = 40;
                         if (settings.momentLikeChance === undefined) settings.momentLikeChance = 30;
@@ -7558,24 +7560,41 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         artwork: art ? [{ src: art, sizes: '180x180', type: 'image/png' }] : []
                     });
                     // 播放/暂停交给页面自己保持（点暂停也继续占位）
-                    try { navigator.mediaSession.setActionHandler('play', () => {}); } catch (e) {}
+                    try { navigator.mediaSession.setActionHandler('play', () => { try { var a = ensureBackgroundAudio(); if (a && a.paused) a.play().catch(function () {}); } catch (e) {} }); } catch (e) {}
                     try { navigator.mediaSession.setActionHandler('pause', () => {}); } catch (e) {}
                     navigator.mediaSession.playbackState = 'playing';
                 } catch (e) {}
             }
 
-            // 后台保活：不再使用任何音频。
-            // 以前会用"静音媒体元素"或"超低频 WebAudio 振荡器"去占住系统音频通道，
-            // 结果就是打断用户在其它 App 里正在播放的音乐 —— 按要求彻底移除，只保留定时器保活。
+            // 后台保活：默认用「混音（ambient）」方式，能保活但不抢占音频通道、不打断其它 App；
+            // 只有用户显式打开"强力模式"时才改用 playback 通道（保活更稳，但会暂停别人的播放）。
             function startDynamicIslandAudio() {
+                if (!settings.dynamicIslandAudio) {
+                    stopDynamicIslandAudio();
+                    return;
+                }
+                var strong = !!settings.keepAliveStrong;
                 try {
-                    if (bgAudio) { try { bgAudio.pause(); } catch (e) {} }
-                    if (audioOsc) { try { audioOsc.stop(); } catch (e) {} try { audioOsc.disconnect(); } catch (e) {} audioOsc = null; }
-                    if (audioGain) { try { audioGain.disconnect(); } catch (e) {} audioGain = null; }
-                    if (audioCtx && audioCtx.state !== 'closed') { try { audioCtx.close(); } catch (e) {} }
-                    audioCtx = null;
-                    audioScheduled = false;
-                    if (navigator.mediaSession) { try { navigator.mediaSession.playbackState = 'none'; } catch (e) {} }
+                    if (strong) {
+                        // 强力模式：占用播放通道，后台保活最稳，但会打断其它 App 的声音（用户主动开启才走这条）
+                        if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch (e) {} }
+                        var a1 = ensureBackgroundAudio();
+                        if (a1 && a1.paused) { var p1 = a1.play(); if (p1 && p1.catch) p1.catch(function () {}); }
+                        updateMediaSession();
+                        audioScheduled = true;
+                    } else if (navigator.audioSession) {
+                        // 不打断模式（默认）：ambient = 与其它音频混音，绝不抢占前台播放
+                        try { navigator.audioSession.type = 'ambient'; } catch (e) {}
+                        var a2 = ensureBackgroundAudio();
+                        if (a2 && a2.paused) { var p2 = a2.play(); if (p2 && p2.catch) p2.catch(function () {}); }
+                        updateMediaSession();
+                        audioScheduled = true;
+                    } else {
+                        // 浏览器没有 Audio Session API，无法保证"混音"，不打断优先 -> 不放任何音频
+                        if (bgAudio) { try { bgAudio.pause(); } catch (e) {} }
+                        if (navigator.mediaSession) { try { navigator.mediaSession.playbackState = 'none'; } catch (e) {} }
+                        audioScheduled = false;
+                    }
                 } catch (e) {}
             }
 
@@ -11186,6 +11205,19 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     startKeepAlive();
                     showNotification(settings.keepAliveEnabled ? '后台保活已开启' : '后台保活已关闭', 'success'); });
                 // 灵动岛音频占位开关
+                (function () {
+                    const sel = document.getElementById('keepAliveStrongToggle');
+                    if (sel && !sel.dataset.bound) {
+                        sel.dataset.bound = '1';
+                        sel.checked = !!settings.keepAliveStrong;
+                        sel.addEventListener('change', (e) => {
+                            settings.keepAliveStrong = e.target.checked;
+                            saveData();
+                            startDynamicIslandAudio();
+                            showNotification(e.target.checked ? '强力保活已开启（会暂停其它 App 的声音）' : '已切回不打断模式', e.target.checked ? 'warning' : 'success', 2600);
+                        });
+                    }
+                })();
                 document.getElementById('dynamicIslandAudioToggle').addEventListener('change', (e) => { settings
                         .dynamicIslandAudio = e.target.checked;
                     saveData();
