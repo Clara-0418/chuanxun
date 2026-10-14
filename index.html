@@ -7273,6 +7273,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             let stickerLibrary = [],
                 myStickerLibrary = [],
                 currentReplyTo = null;
+            momentReplyTarget = null;   // 朋友圈：正在回复谁（{postId, userId}）
             let saveTimeout = null,
                 editTarget = null,
                 avatarTarget = null;
@@ -7315,6 +7316,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 audioScheduled = false;
             let bgAudio = null; // 后台保活用的静音媒体元素（锁屏 / 灵动岛可见）
             let lastMirrorAt = 0; // localStorage 镜像上次写入时间（节流用）
+            var momentReplyTarget = null; // 朋友圈：正在回复谁（{postId,userId}）—— 用 var 避免 TDZ
 
             // ===== DOM 引用 =====
             const $ = (s) => document.querySelector(s);
@@ -8507,6 +8509,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         addMessage({ sender: 'user', text: text || '', image: imgData, status: 'sent',
                             replyTo: currentReplyTo });
                         currentReplyTo = null;
+            momentReplyTarget = null;   // 朋友圈：正在回复谁（{postId, userId}）
                         updateReplyPreview();
                         messageInput.value = '';
                         messageInput.style.height = '38px';
@@ -8522,6 +8525,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 if (!text) return;
                 addMessage({ sender: 'user', text, status: 'sent', replyTo: currentReplyTo });
                 currentReplyTo = null;
+            momentReplyTarget = null;   // 朋友圈：正在回复谁（{postId, userId}）
                 updateReplyPreview();
                 messageInput.value = '';
                 messageInput.style.height = '38px';
@@ -9759,7 +9763,7 @@ if (av) {
                         const del = c.userId === 'me' ?
                             `<button class="cdelete" data-del-comment="${escapeHtml(c.id)}" data-post="${escapeHtml(post.id)}" title="删除"><i class="fas fa-times"></i></button>` :
                             '';
-                        return `<div class="moment-comment"><span class="cname">${escapeHtml(cName + suffix)}</span>：<span>${escapeHtml(c.text)}</span><span class="ctime">${new Date(c.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>${del}</div>`;
+                        return `<div class="moment-comment" data-cuser="${escapeHtml(c.userId)}" data-cpost="${escapeHtml(post.id)}"><span class="cname">${escapeHtml(cName + suffix)}</span>：<span>${escapeHtml(c.text)}</span><span class="ctime">${new Date(c.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>${del}</div>`;
                     }).join('');
                     const interactHtml = (likesHtml || commentsHtml) ?
                         `<div class="moment-interact">${likesHtml}${commentsHtml}</div>` : '';
@@ -9797,7 +9801,8 @@ if (cmt) {
     if (field) {
         const cnameEl = cmt.querySelector('.cname');
         const nm = cnameEl ? cnameEl.textContent.trim() : '';
-        field.value = nm ? ('@' + nm + ' ') : '';
+        momentReplyTarget = { postId: (cmt.closest('.moment-item') ? cmt.closest('.moment-item').dataset.id : ''), userId: (cmt.dataset.cuser || '') };
+        field.placeholder = '回复 ' + (nm.split(' ')[0] || nm);
         try { field.focus(); } catch (e) {}
     }
     return;
@@ -9874,9 +9879,12 @@ if (img) { viewImage(img.dataset.src); return; }
                 const post = momentPosts.find(p => p.id === postId);
                 if (!post) return;
                 if (!post.comments) post.comments = [];
-                const comment = { id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), userId: 'me',
+                const _rt = (momentReplyTarget && momentReplyTarget.postId === postId && momentReplyTarget.userId && momentReplyTarget.userId !== 'me') ? momentReplyTarget.userId : null;
+                const comment = { id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), userId: 'me', replyTo: _rt,
                     text: text, timestamp: Date.now() };
                 post.comments.push(comment);
+                momentReplyTarget = null;
+                input.placeholder = '评论';
                 input.value = '';
                 saveData();
                 renderMoments();
