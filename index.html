@@ -6151,6 +6151,29 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== 主页悬浮的「更换主页背景」按钮：收进组件设置面板，主页无缝全屏 ===== */
         #lovHomeBgBtn { display: none !important; }
 
+        /* ===== 主页尺寸修正 ===== */
+        /* ① 顶部留出状态栏/灵动岛安全区，别再顶到时间上 */
+        #hm2Root { padding-top: calc(env(safe-area-inset-top, 0px) + 18px) !important; }
+        #hm2Profile { margin-top: 4px !important; }
+
+        /* ② 纪念日天数徽标：没有内容时不要显示空药丸 */
+        #hm2BadgeSlot:empty { display: none !important; }
+        #homePage #lovHomeDays:empty { display: none !important; }
+        #homePage #lovHomeDays {
+            font-size: 14px !important; font-weight: 600 !important; letter-spacing: .5px;
+            color: var(--text-primary) !important;
+            background: rgba(var(--secondary-bg-rgb, 255, 255, 255), .55) !important;
+            border: 1px solid var(--border-color) !important;
+            border-radius: 999px !important; padding: 7px 16px !important; margin: 10px 0 12px !important;
+        }
+
+        /* ③ 底部 Dock：保证标签不被切掉（安全区取固定最小值兜底） */
+        #hm2Dock {
+            padding: 8px 6px calc(10px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+        }
+        .hm2-dock-item { padding: 8px 2px !important; }
+        .hm2-dock-item span, .hm2-dock-item .hm2-dock-label { font-size: 11px !important; line-height: 1.25 !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -12801,6 +12824,15 @@ if (img) { viewImage(img.dataset.src); return; }
         if (an) an.addEventListener('click', function () { close(); try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
     }
     function gear() {
+        // 没设纪念日时徽标是空的：给个可点提示，别留个空药丸
+        try {
+            var badge = el('lovHomeDays');
+            if (badge && !badge.textContent.trim()) {
+                badge.textContent = '设置纪念日';
+                badge.style.cursor = 'pointer';
+                badge.addEventListener('click', function () { try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
+            }
+        } catch (e) {}
         var card = el('hm2Profile');
         if (!card || el('hwGearBtn')) return;
         var b = document.createElement('button');
