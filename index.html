@@ -4747,6 +4747,51 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：home2 ===== */
+#hm2Root{display:flex;flex-direction:column;align-items:center;width:100%;padding:10px 14px 0;box-sizing:border-box;font-family:var(--font-family);position:relative;z-index:1;}
+.hm2-wrap{width:min(100%,430px);display:flex;flex-direction:column;gap:10px;}
+.hm2-card{background:rgba(var(--secondary-bg-rgb,255,255,255),.72);border:1px solid var(--border-color);border-radius:22px;box-shadow:0 6px 24px rgba(0,0,0,.06);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+.hm2-hidden{display:none !important;}
+#hm2Profile{padding:16px 16px 14px;display:flex;flex-direction:column;align-items:center;}
+.hm2-avatars{display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+.hm2-avatar{width:54px;height:54px;border-radius:50%;overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;color:var(--text-secondary);background:rgba(var(--accent-color-rgb),.12);border:2px solid rgba(var(--secondary-bg-rgb,255,255,255),.9);box-shadow:0 2px 10px rgba(0,0,0,.08);}
+.hm2-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.hm2-avatar-mine{z-index:2;color:var(--accent-color);}
+.hm2-avatar-partner{z-index:1;margin-left:-12px;}
+.hm2-names{display:flex;align-items:baseline;justify-content:center;gap:7px;max-width:100%;padding:0 4px;}
+.hm2-name{font-size:19px;font-weight:700;color:var(--text-primary);letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%;}
+.hm2-name-sep{font-size:13px;color:var(--text-secondary);opacity:.7;}
+.hm2-signature{margin-top:6px;font-size:12px;line-height:1.6;color:var(--text-secondary);text-align:center;max-width:100%;word-break:break-word;}
+.hm2-badge-slot{margin-top:10px;display:flex;align-items:center;justify-content:center;width:100%;}
+#hm2Profile #lovHomeDays{font-size:12.5px !important;font-weight:600 !important;letter-spacing:.5px;background:rgba(var(--accent-color-rgb),.12) !important;border:1px solid rgba(var(--accent-color-rgb),.22) !important;border-radius:999px !important;padding:5px 14px !important;margin:0 !important;color:var(--text-primary) !important;display:inline-block !important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#hm2Clock{padding:14px 16px 12px;display:flex;flex-direction:column;align-items:center;}
+#hm2Time{font-size:52px;font-weight:200;line-height:1.05;letter-spacing:2px;color:var(--text-primary);font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+#hm2Date{margin-top:4px;font-size:12.5px;letter-spacing:1px;color:var(--text-secondary);}
+#hm2Features{padding:14px 12px 8px;}
+#hm2Grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.hm2-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 2px 8px;border-radius:16px;cursor:pointer;border:1px solid transparent;background:transparent;transition:transform .16s,background .2s,border-color .2s;-webkit-tap-highlight-color:transparent;}
+.hm2-tile:active{transform:scale(.94);background:rgba(var(--accent-color-rgb),.08);}
+.hm2-tile-icon{width:44px;height:44px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-color);background:rgba(var(--accent-color-rgb),.1);overflow:hidden;}
+.hm2-tile-icon > i{font-size:18px;line-height:1;}
+.hm2-tile-icon img{width:100%;height:100%;object-fit:cover;}
+.hm2-tile-name{font-size:11px;line-height:1.3;color:var(--text-secondary);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#hm2Dots{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;min-height:6px;}
+.hm2-dot{width:6px;height:6px;border-radius:50%;background:var(--border-color);transition:background .2s,transform .2s;cursor:pointer;}
+.hm2-dot.active{background:var(--accent-color);transform:scale(1.15);}
+#hm2Dock{position:sticky;bottom:8px;z-index:5;margin-top:8px;margin-bottom:calc(10px + env(safe-area-inset-bottom,0px));background:rgba(var(--secondary-bg-rgb,255,255,255),.9);border:1px solid var(--border-color);border-radius:20px;box-shadow:0 10px 28px rgba(0,0,0,.12);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:flex;align-items:center;gap:2px;padding:7px 6px;}
+.hm2-dock-item{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;border-radius:14px;border:none;background:transparent;color:var(--text-secondary);font-family:inherit;font-size:10px;line-height:1.2;cursor:pointer;transition:background .2s,color .2s;-webkit-tap-highlight-color:transparent;}
+.hm2-dock-item i{font-size:15px;}
+.hm2-dock-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hm2-dock-item:active{opacity:.75;}
+.hm2-dock-item.active{background:rgba(var(--accent-color-rgb),.14);color:var(--accent-color);}
+.hm2-modal{display:none;position:fixed;inset:0;z-index:2400;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:16px;box-sizing:border-box;}
+.hm2-stats-box{width:min(100%,340px);max-height:86vh;overflow-y:auto;background:var(--secondary-bg);border:1px solid var(--border-color);border-radius:var(--radius,16px);box-shadow:0 18px 55px rgba(0,0,0,.2);padding:20px 20px 16px;text-align:center;font-family:var(--font-family);}
+.hm2-stats-title{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:12px;}
+.hm2-stats-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;margin-bottom:6px;border-radius:12px;background:rgba(var(--accent-color-rgb),.08);font-size:13px;color:var(--text-secondary);}
+.hm2-stats-row b{font-size:15px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;}
+.hm2-stats-note{margin-top:8px;font-size:11px;line-height:1.6;color:var(--text-secondary);opacity:.85;}
+.hm2-stats-btns{margin-top:12px;}
+
 /* ===== 功能模块：lovediary ===== */
 /* ===== 恋爱日记（lov 前缀，独立模块；极简扁平：细边框、小圆角、无渐变无阴影） ===== */
 /* 弹层不超过屏幕：max-height 90vh / 100dvh；内部滚动区 flex:1 + min-height:0 + overflow-y:auto */
@@ -11898,7 +11943,8 @@ if (img) { viewImage(img.dataset.src); return; }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature'
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature',
+                    'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
                 });
@@ -12545,6 +12591,656 @@ if (img) { viewImage(img.dataset.src); return; }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：home2（独立作用域） ===== */
+(function(){
+
+(function () {
+    'use strict';
+
+    /* 注入的 HTML 模板（与上面 @HTML 段完全一致，避免依赖外部注入器顺序） */
+    var TPL = [
+        '<div id="hm2Root" class="hm2-root">',
+        '  <div class="hm2-wrap">',
+        '    <section id="hm2Profile" class="hm2-card">',
+        '      <div class="hm2-avatars">',
+        '        <div class="hm2-avatar hm2-avatar-mine" id="hm2AvatarMine"><i class="fas fa-user"></i></div>',
+        '        <div class="hm2-avatar hm2-avatar-partner" id="hm2AvatarPartner"><i class="fas fa-user"></i></div>',
+        '      </div>',
+        '      <div class="hm2-names">',
+        '        <span class="hm2-name" id="hm2NameMine">我</span>',
+        '        <span class="hm2-name-sep">&amp;</span>',
+        '        <span class="hm2-name" id="hm2NamePartner">梦角</span>',
+        '      </div>',
+        '      <div class="hm2-signature" id="hm2Signature"></div>',
+        '      <div class="hm2-badge-slot" id="hm2BadgeSlot"></div>',
+        '    </section>',
+        '    <section id="hm2Clock" class="hm2-card">',
+        '      <div id="hm2Time">--:--</div>',
+        '      <div id="hm2Date"></div>',
+        '    </section>',
+        '    <section id="hm2Features" class="hm2-card">',
+        '      <div id="hm2Grid"></div>',
+        '      <div id="hm2Dots"></div>',
+        '    </section>',
+        '    <nav id="hm2Dock">',
+        '      <button type="button" class="hm2-dock-item" data-hm2-action="appearance"><i class="fas fa-palette"></i><span class="hm2-dock-label">外观设置</span></button>',
+        '      <button type="button" class="hm2-dock-item" data-hm2-action="replylib"><i class="fas fa-comment-dots"></i><span class="hm2-dock-label">字卡库</span></button>',
+        '      <button type="button" class="hm2-dock-item" data-hm2-action="chat"><i class="fas fa-sliders-h"></i><span class="hm2-dock-label">聊天设置</span></button>',
+        '      <button type="button" class="hm2-dock-item" data-hm2-action="stats"><i class="fas fa-chart-bar"></i><span class="hm2-dock-label">消息统计</span></button>',
+        '      <button type="button" class="hm2-dock-item" data-hm2-action="moments"><i class="fas fa-image"></i><span class="hm2-dock-label">朋友圈</span></button>',
+        '    </nav>',
+        '  </div>',
+        '  <div id="hm2StatsModal" class="hm2-modal">',
+        '    <div class="hm2-stats-box">',
+        '      <div class="hm2-stats-title">消息统计</div>',
+        '      <div id="hm2StatsBody"></div>',
+        '      <div class="modal-buttons hm2-stats-btns"><button type="button" class="modal-btn modal-btn-secondary" id="hm2StatsClose">关闭</button></div>',
+        '    </div>',
+        '  </div>',
+        '</div>'
+    ].join('\n');
+
+    var STATE = {
+        item: null,
+        ticks: null,
+        obs: null,
+        booted: false,
+        activePage: 0,
+        items: []
+    };
+    var OLD_IDS = ['homeFeatureGrid', 'homeNickname', 'homeSignature', 'homeCover', 'homeAvatar', 'homeStatusChip'];
+    var OLD_SEL = ['#homePage .home-profile', '#homePage .home-section-title'];
+    var TIMERS = [];
+
+    function doc() { return document; }
+    function byId(id) { try { return doc().getElementById(id); } catch (e) { return null; } }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function pick() {
+        for (var i = 0; i < arguments.length; i++) {
+            var v = arguments[i];
+            if (typeof v === 'function') { try { v = v(); } catch (e) { v = null; } }
+            if (typeof v === 'string' && v !== '') return v;
+        }
+        return '';
+    }
+    function func(name) {
+        try {
+            if (typeof window[name] === 'function') return window[name];
+            if (typeof globalThis[name] === 'function') return globalThis[name];
+        } catch (e) {}
+        return null;
+    }
+    function show(el) {
+        if (!el) return false;
+        var fn = func('showModal');
+        if (fn) { try { fn(el); return true; } catch (e) {} }
+        try { el.style.display = 'flex'; return true; } catch (e) { return false; }
+    }
+    function hide(el) {
+        if (!el) return false;
+        var fn = func('hideModal');
+        if (fn) { try { fn(el); return true; } catch (e) {} }
+        try { el.style.display = 'none'; return true; } catch (e) { return false; }
+    }
+    function addTimer(fn, ms) {
+        try { var id = setInterval(fn, ms); TIMERS.push(id); return id; } catch (e) { return null; }
+    }
+    function clearTimers() {
+        for (var i = 0; i < TIMERS.length; i++) { try { clearInterval(TIMERS[i]); } catch (e) {} }
+        TIMERS = [];
+    }
+    function firstChar(name) {
+        var s = String(name == null ? '' : name).replace(/^\s+|\s+$/g, '');
+        if (!s) return '';
+        try { if (typeof Array.from === 'function') return Array.from(s)[0]; } catch (e) {}
+        return s.charAt(0);
+    }
+    /* 模板解析：优先用注入器显式给的 window.__HM2_HTML__，其次用脚本内自带 @HTML 段的字面量 */
+    function tplString() {
+        var out = '';
+        try {
+            var ext = window.__HM2_HTML__;
+            if (typeof ext === 'string' && /id=["']hm2Root["']/.test(ext)) out = ext;
+        } catch (e) {}
+        if (!out) {
+            var lit = '';
+            try { if (typeof __HM2_TPL__ !== 'undefined') lit = __HM2_TPL__; } catch (e) { lit = ''; }
+            out = String(lit == null ? '' : lit).replace(/^\s+|\s+$/g, '');
+        }
+        return out;
+    }
+
+    /* ===================== 数据读取（每次渲染重新取，换头像/改名后即时生效） ===================== */
+    function getSettings() {
+        try { if (window.settings && typeof window.settings === 'object') return window.settings; } catch (e) {}
+        try { if (typeof settings !== 'undefined' && settings) return settings; } catch (e) {}
+        return {};
+    }
+    function getFeatureData() {
+        try { if (window.featureData && typeof window.featureData === 'object') return window.featureData; } catch (e) {}
+        try { if (typeof featureData !== 'undefined' && featureData) return featureData; } catch (e) {}
+        return {};
+    }
+    function myName() {
+        var n = getSettings().myName;
+        return (typeof n === 'string' && n.trim()) ? n.trim() : '我';
+    }
+    function partnerName() {
+        var n = getSettings().partnerName;
+        return (typeof n === 'string' && n.trim()) ? n.trim() : '梦角';
+    }
+    /* 我的头像：avatarLib.currentMine → getUserAvatar('me') → #myAvatar 里的 img → ''（文字头像） */
+    function mainAvatarSrc(id) {
+        var el = byId(id);
+        if (!el) return '';
+        var img = el.querySelector ? el.querySelector('img') : null;
+        return (img && img.src) ? img.src : '';
+    }
+    function mineAvatarSrc() {
+        var lib = (getFeatureData().avatarLib || {}).currentMine;
+        var fn = func('getUserAvatar');
+        var fromFn = '';
+        if (fn) { try { fromFn = fn('me') || ''; } catch (e) {} }
+        return pick(lib, fromFn, mainAvatarSrc('myAvatar'));
+    }
+    /* 梦角头像：avatarLib.currentPartner → getUserAvatar('partner') → #partnerAvatar → '' */
+    function partnerAvatarSrc() {
+        var lib = (getFeatureData().avatarLib || {}).currentPartner;
+        var fn = func('getUserAvatar');
+        var fromFn = '';
+        if (fn) { try { fromFn = fn('partner') || ''; } catch (e) {} }
+        return pick(lib, fromFn, mainAvatarSrc('partnerAvatar'));
+    }
+    function signatureText() {
+        var s = (getFeatureData().profile || {}).signature;
+        if (typeof s !== 'string') return '';
+        s = s.trim();
+        if (!s) return '';
+        if (s === '点这里写下你的签名…' || s === '点这里写下你的签名...') return '';
+        return s;
+    }
+    function paintAvatar(el, name, src) {
+        if (!el) return;
+        if (src) el.innerHTML = '<img src="' + esc(src) + '" alt="">';
+        else {
+            var ch = firstChar(name);
+            el.innerHTML = ch ? '<span class="hm2-avatar-txt">' + esc(ch) + '</span>' : '<i class="fas fa-user"></i>';
+        }
+    }
+
+    /* ===================== 大时钟 ===================== */
+    function pad2(n) { return n < 10 ? '0' + n : String(n); }
+    function hm2TimeText(d) { return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+    function hm2DateText(d) {
+        var w = '日一二三四五六'.charAt(d.getDay() % 7);
+        return (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + w;
+    }
+    function renderClock() {
+        var d = new Date();
+        var t = byId('hm2Time'), dt = byId('hm2Date');
+        if (t) t.textContent = hm2TimeText(d);
+        if (dt) dt.textContent = hm2DateText(d);
+        return { time: hm2TimeText(d), date: hm2DateText(d) };
+    }
+
+    /* ===================== 宫格：从 #homeFeatureGrid 读现有卡片 ===================== */
+    function readCards() {
+        var grid = byId('homeFeatureGrid');
+        if (!grid) return [];
+        var cards = grid.querySelectorAll('.home-feature-card');
+        var out = [], seen = {};
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            var id = card.getAttribute('data-feature') || '';
+            if (!id || seen[id]) continue;
+            seen[id] = 1;
+            var nameEl = card.querySelector('.fc-name');
+            var iconEl = card.querySelector('.fc-icon i');
+            var cls = '';
+            try { cls = iconEl ? (iconEl.className || '') : ''; } catch (e) {}
+            var raw = '';
+            try { raw = iconEl ? (iconEl.getAttribute('class') || '') : ''; } catch (e) {}
+            var iconCls = (raw || cls).replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+            if (!iconCls) iconCls = 'fas fa-circle';
+            out.push({
+                id: id,
+                name: (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : id,
+                icon: iconCls
+            });
+        }
+        return out;
+    }
+    function tileHtml(item) {
+        return '<div class="hm2-tile" data-hm2-feature="' + esc(item.id) + '" role="button" tabindex="0">' +
+            '<div class="hm2-tile-icon"><i class="' + esc(item.icon) + '"></i></div>' +
+            '<div class="hm2-tile-name">' + esc(item.name) + '</div></div>';
+    }
+    function renderGrid(forceReset) {
+        var grid = byId('hm2Grid');
+        if (!grid) return;
+        var items = readCards();
+        var sig = items.map(function (it) { return it.id; }).join('|');
+        STATE.items = items;
+        if (grid.dataset.hm2Sig !== sig) {
+            grid.dataset.hm2Sig = sig;
+            grid.innerHTML = items.map(tileHtml).join('');
+        }
+        var pages = Math.max(1, Math.ceil(items.length / 8));
+        if (forceReset) STATE.activePage = 0;
+        if (STATE.activePage > pages - 1) STATE.activePage = pages - 1;
+        var tiles = grid.querySelectorAll('.hm2-tile');
+        for (var i = 0; i < tiles.length; i++) {
+            var mine = (i / 8 | 0) === STATE.activePage;
+            tiles[i].style.display = mine ? 'flex' : 'none';
+        }
+        renderDots(pages);
+    }
+    function renderDots(pages) {
+        var dots = byId('hm2Dots');
+        if (!dots) return;
+        if (dots.dataset.hm2Pages !== String(pages) || dots.children.length !== pages) {
+            var html = '';
+            for (var p = 0; p < pages; p++) {
+                html += '<span class="hm2-dot" data-hm2-page="' + p + '" role="button" aria-label="第' + (p + 1) + '页"></span>';
+            }
+            dots.innerHTML = html;
+            dots.dataset.hm2Pages = String(pages);
+        }
+        for (var i = 0; i < dots.children.length; i++) {
+            var on = i === STATE.activePage;
+            dots.children[i].className = 'hm2-dot' + (on ? ' active' : '');
+        }
+    }
+    function goPage(p) {
+        var pages = Math.max(1, Math.ceil(STATE.items.length / 8));
+        p = Number(p);
+        if (isNaN(p) || p < 0 || p > pages - 1) return false;
+        STATE.activePage = p;
+        var grid = byId('hm2Grid');
+        if (grid) {
+            var tiles = grid.querySelectorAll('.hm2-tile');
+            for (var i = 0; i < tiles.length; i++) tiles[i].style.display = ((i / 8 | 0) === p) ? 'flex' : 'none';
+        }
+        renderDots(pages);
+        return true;
+    }
+    function openFeature(id) {
+        if (!id) return false;
+        var fn = func('openHomeFeature');
+        if (fn) { try { fn(id); return true; } catch (e) {} }
+        var card = null;
+        try { card = doc().querySelector('#homeFeatureGrid .home-feature-card[data-feature="' + id + '"]'); } catch (e) {}
+        if (card) { try { card.click(); return true; } catch (e) {} }
+        return false;
+    }
+
+    /* ===================== 消息统计（只读 window.messages） ===================== */
+    function getMessages() {
+        try { if (Array.isArray(window.messages)) return window.messages; } catch (e) {}
+        try {
+            var raw = window.localStorage ? window.localStorage.getItem('CHAT_APP_V13_appData') : null;
+            if (raw) {
+                var data = JSON.parse(raw);
+                if (data && Array.isArray(data.messages)) return data.messages;
+            }
+        } catch (e) {}
+        return [];
+    }
+    function isSystemMsg(m) {
+        if (!m) return false;
+        if (m.type === 'system') return true;
+        return String(m.sender == null ? '' : m.sender) === 'system';
+    }
+    function isMineMsg(m) {
+        if (!m) return false;
+        var s = String(m.sender == null ? '' : m.sender);
+        if (s === 'user' || s === 'me') return true;
+        return s !== '' && s === myName();
+    }
+    function countMessages(list, now) {
+        list = Array.isArray(list) ? list : [];
+        now = now || new Date();
+        var start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        var out = { total: list.length, mine: 0, partner: 0, system: 0, today: 0, first: 0, last: 0 };
+        for (var i = 0; i < list.length; i++) {
+            var m = list[i];
+            if (!m || typeof m !== 'object') continue;
+            if (isSystemMsg(m)) out.system++;
+            else if (isMineMsg(m)) out.mine++;
+            else out.partner++;
+            var t = Number(m.timestamp);
+            if (isFinite(t) && t > 0) {
+                if (!out.first || t < out.first) out.first = t;
+                if (t > out.last) out.last = t;
+                if (t >= start) out.today++;
+            }
+        }
+        return out;
+    }
+    function fmtDay(ts) {
+        if (!ts) return '';
+        var d = new Date(ts);
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+    function statsHtml(c) {
+        var rows = [
+            ['总消息数', c.total],
+            ['我发的', c.mine],
+            ['梦角发的', c.partner],
+            ['今天发的', c.today],
+            ['系统消息', c.system]
+        ];
+        var html = rows.map(function (r) {
+            return '<div class="hm2-stats-row"><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>';
+        }).join('');
+        if (c.first) {
+            html += '<div class="hm2-stats-note">最早一条 ' + esc(fmtDay(c.first)) + '，最近一条 ' + esc(fmtDay(c.last)) + '</div>';
+        }
+        return html;
+    }
+    function openStats() {
+        var body = byId('hm2StatsBody');
+        var counts = countMessages(getMessages());
+        if (body) body.innerHTML = statsHtml(counts);
+        show(byId('hm2StatsModal'));
+        return counts;
+    }
+    function closeStats() { hide(byId('hm2StatsModal')); }
+
+    /* ===================== 隐藏旧资料区 / 旧宫格（只 display:none，不删节点） ===================== */
+    function hideLegacy() {
+        var i, el;
+        for (i = 0; i < OLD_SEL.length; i++) {
+            var list = [];
+            try { list = doc().querySelectorAll(OLD_SEL[i]); } catch (e) {}
+            for (var j = 0; j < list.length; j++) {
+                list[j].classList.add('hm2-hidden');
+                list[j].setAttribute('data-hm2-hidden', '1');
+            }
+        }
+        for (i = 0; i < OLD_IDS.length; i++) {
+            el = byId(OLD_IDS[i]);
+            if (!el) continue;
+            el.classList.add('hm2-hidden');
+            el.setAttribute('data-hm2-hidden', '1');
+        }
+        var grid = byId('homeFeatureGrid');
+        if (grid) {
+            var cards = grid.querySelectorAll('.home-feature-card');
+            for (i = 0; i < cards.length; i++) {
+                cards[i].classList.add('hm2-hidden');
+                cards[i].setAttribute('data-hm2-hidden', '1');
+            }
+        }
+    }
+
+    /* ===================== 顶部资料卡（含把 #lovHomeDays 移进来） ===================== */
+    function moveBadge() {
+        var slot = byId('hm2BadgeSlot');
+        if (!slot) return false;
+        var badge = byId('lovHomeDays');
+        if (!badge) return false;
+        if (badge.parentNode !== slot) { try { slot.appendChild(badge); } catch (e) { return false; } }
+        return true;
+    }
+    function renderProfile() {
+        var mn = myName(), pn = partnerName();
+        var elMine = byId('hm2NameMine'), elPartner = byId('hm2NamePartner'), sig = byId('hm2Signature');
+        if (elMine) elMine.textContent = mn;
+        if (elPartner) elPartner.textContent = pn;
+        if (sig) sig.textContent = signatureText();
+        paintAvatar(byId('hm2AvatarMine'), mn, mineAvatarSrc());
+        paintAvatar(byId('hm2AvatarPartner'), pn, partnerAvatarSrc());
+        moveBadge();
+    }
+
+    /* ===================== Dock ===================== */
+    function chainClicks(ids) {
+        try {
+            var settingsBtn = byId('settingsBtn');
+            if (settingsBtn) {
+                settingsBtn.disabled = true;
+                setTimeout(function () { try { settingsBtn.disabled = false; } catch (e) {} }, 700);
+                if (typeof settingsBtn.click === 'function') settingsBtn.click();
+            }
+        } catch (e) {}
+        var delay = 90;
+        for (var i = 0; i < ids.length; i++) {
+            (function (id, d) {
+                setTimeout(function () {
+                    var el = byId(id);
+                    if (!el) return;
+                    try {
+                        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                    } catch (e) {
+                        try { el.click(); } catch (e2) {}
+                    }
+                }, d);
+            })(ids[i], delay);
+            delay += 170;
+        }
+    }
+    function openVia(targetModalId, chainIds) {
+        var modal = byId(targetModalId);
+        if (modal) { show(modal); return true; }
+        chainClicks(chainIds || []);
+        return false;
+    }
+    var DOCK_ACTIONS = {
+        appearance: function () { return openVia('appearanceModal', ['appearanceCard']); },
+        replylib: function () {
+            var btn = byId('replyLibBtn');
+            if (btn) { try { btn.click(); return true; } catch (e) {} }
+            return openVia('replyLibModal', ['replyLibCard']);
+        },
+        chat: function () { return openVia('chatSettingsModal', ['chatSettingsCard']); },
+        stats: function () { openStats(); return true; },
+        moments: function () { return openFeature('moments'); }
+    };
+    function dockClick(e) {
+        var t = e && e.target;
+        if (t && t.closest) t = t.closest('.hm2-dock-item');
+        if (!t || !t.getAttribute) return;
+        var action = t.getAttribute('data-hm2-action');
+        if (!action) return;
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        var fn = DOCK_ACTIONS[action];
+        if (typeof fn === 'function') { try { fn(); } catch (err) {} }
+        setActiveDock(action);
+    }
+    function setActiveDock(action) {
+        var dock = byId('hm2Dock');
+        if (!dock) return;
+        var items = dock.querySelectorAll('.hm2-dock-item');
+        for (var i = 0; i < items.length; i++) {
+            var on = items[i].getAttribute('data-hm2-action') === action;
+            items[i].className = 'hm2-dock-item' + (on ? ' active' : '');
+        }
+    }
+
+    /* ===================== 注入 / 绑定 / 刷新 ===================== */
+    function injectRoot() {
+        var root = byId('hm2Root');
+        if (root) return root;
+        var tpl = tplString();
+        if (!tpl) return null;
+        var tmp = doc().createElement('div');
+        tmp.innerHTML = tpl;
+        root = tmp.querySelector('#hm2Root');
+        var page = byId('homePage');
+        if (!root || !page) return null;
+        tmp.removeChild(root);
+        try { page.appendChild(root); } catch (e) { return null; }
+        return root;
+    }
+    function bindOnce(root) {
+        if (!root) return;
+        /* 幂等标记双写（属性 + dataset），并用属性兜底判定，避免个别环境下 dataset 不同步导致重复绑定 */
+        var bound = false;
+        try { bound = root.getAttribute('data-hm2-bound') === '1'; } catch (e) {}
+        if (bound) return;
+        try { root.setAttribute('data-hm2-bound', '1'); } catch (e) {}
+        try { root.dataset.hm2Bound = '1'; } catch (e) {}
+        if (!STATE.ticks) STATE.ticks = addTimer(function () { try { renderClock(); } catch (e) {} }, 1000);
+
+        var grid = byId('hm2Grid');
+        if (grid && typeof grid.addEventListener === 'function') {
+            grid.addEventListener('click', function (e) {
+                var t = e.target;
+                if (t && t.closest) t = t.closest('.hm2-tile');
+                if (!t || !t.getAttribute) return;
+                var id = t.getAttribute('data-hm2-feature');
+                if (id) openFeature(id);
+            });
+        }
+        var dots = byId('hm2Dots');
+        if (dots && typeof dots.addEventListener === 'function') {
+            dots.addEventListener('click', function (e) {
+                var t = e.target;
+                if (t && t.closest) t = t.closest('.hm2-dot');
+                if (!t || !t.getAttribute) return;
+                goPage(t.getAttribute('data-hm2-page'));
+            });
+        }
+        var dock = byId('hm2Dock');
+        if (dock && typeof dock.addEventListener === 'function') {
+            dock.addEventListener('click', dockClick);
+        }
+        var closeBtn = byId('hm2StatsClose');
+        if (closeBtn && typeof closeBtn.addEventListener === 'function') {
+            closeBtn.addEventListener('click', function (e) {
+                if (e && e.stopPropagation) e.stopPropagation();
+                closeStats();
+            });
+        }
+        var statsModal = byId('hm2StatsModal');
+        if (statsModal && typeof statsModal.addEventListener === 'function') {
+            statsModal.addEventListener('click', function (e) { if (e.target === statsModal) closeStats(); });
+        }
+        setActiveDock('');
+    }
+    function startObserver() {
+        if (STATE.obs) return;
+        if (typeof MutationObserver !== 'function') return;
+        var pending = false;
+        var run = function () {
+            pending = false;
+            try { syncAll(false); } catch (e) {}
+        };
+        var observer = new MutationObserver(function (records) {
+            for (var i = 0; i < records.length; i++) {
+                var rec = records[i];
+                if (rec.type === 'childList' && rec.addedNodes && rec.addedNodes.length) {
+                    var hit = false;
+                    for (var j = 0; j < rec.addedNodes.length; j++) {
+                        var n = rec.addedNodes[j];
+                        if (n && n.nodeType === 1) { hit = true; break; }
+                    }
+                    if (!hit) continue;
+                }
+                if (pending) return;
+                pending = true;
+                setTimeout(run, 120);
+                return;
+            }
+        });
+        try { observer.observe(doc().body, { childList: true, subtree: true }); STATE.obs = observer; } catch (e) { STATE.obs = null; }
+    }
+    function syncAll(reset) {
+        var root = injectRoot();
+        if (root) bindOnce(root);
+        renderProfile();
+        renderClock();
+        renderGrid(!!reset);
+        hideLegacy();
+        return true;
+    }
+    function initHomeLayoutFeature() {
+        var root = injectRoot();
+        if (!root) return false;
+        bindOnce(root);
+        if (!STATE.booted) {
+            STATE.booted = true;
+            try { renderClock(); } catch (e) {}
+        }
+        syncAll(true);
+        if (!STATE.obs) startObserver();
+        return true;
+    }
+
+    window.initHomeLayoutFeature = initHomeLayoutFeature;
+    window.hm2Home = {
+        init: initHomeLayoutFeature,
+        template: tplString,
+        refresh: function () { return syncAll(false); },
+        items: function () { return readCards(); },
+        page: function (p) { return goPage(p); },
+        pageCount: function () { return Math.max(1, Math.ceil(readCards().length / 8)); },
+        activePage: function () { return STATE.activePage; },
+        dotCount: function () { var d = byId('hm2Dots'); return d ? d.children.length : 0; },
+        clock: function () { return renderClock(); },
+        stats: function () { return countMessages(getMessages()); },
+        showStats: openStats,
+        hideStats: closeStats,
+        hideLegacy: hideLegacy,
+        openFeature: openFeature,
+        dock: function (action) { var f = DOCK_ACTIONS[action]; return f ? f() : false; },
+        stop: function () { clearTimers(); try { if (STATE.obs) STATE.obs.disconnect(); } catch (e) {} STATE.obs = null; }
+    };
+})();
+/* 尾部：把 @HTML 段以字面量形式交给上面的 IIFE，保证模块自带 DOM 模板、不依赖外部注入顺序；随后自动初始化。 */
+var __HM2_TPL__ = '<div id="hm2Root" class="hm2-root">\n' +
+'  <div class="hm2-wrap">\n' +
+'    <section id="hm2Profile" class="hm2-card">\n' +
+'      <div class="hm2-avatars">\n' +
+'        <div class="hm2-avatar hm2-avatar-mine" id="hm2AvatarMine"><i class="fas fa-user"></i></div>\n' +
+'        <div class="hm2-avatar hm2-avatar-partner" id="hm2AvatarPartner"><i class="fas fa-user"></i></div>\n' +
+'      </div>\n' +
+'      <div class="hm2-names">\n' +
+'        <span class="hm2-name" id="hm2NameMine">我</span>\n' +
+'        <span class="hm2-name-sep">&amp;</span>\n' +
+'        <span class="hm2-name" id="hm2NamePartner">梦角</span>\n' +
+'      </div>\n' +
+'      <div class="hm2-signature" id="hm2Signature"></div>\n' +
+'      <div class="hm2-badge-slot" id="hm2BadgeSlot"></div>\n' +
+'    </section>\n' +
+'    <section id="hm2Clock" class="hm2-card">\n' +
+'      <div id="hm2Time">--:--</div>\n' +
+'      <div id="hm2Date"></div>\n' +
+'    </section>\n' +
+'    <section id="hm2Features" class="hm2-card">\n' +
+'      <div id="hm2Grid"></div>\n' +
+'      <div id="hm2Dots"></div>\n' +
+'    </section>\n' +
+'    <nav id="hm2Dock">\n' +
+'      <button type="button" class="hm2-dock-item" data-hm2-action="appearance"><i class="fas fa-palette"></i><span class="hm2-dock-label">外观设置</span></button>\n' +
+'      <button type="button" class="hm2-dock-item" data-hm2-action="replylib"><i class="fas fa-comment-dots"></i><span class="hm2-dock-label">字卡库</span></button>\n' +
+'      <button type="button" class="hm2-dock-item" data-hm2-action="chat"><i class="fas fa-sliders-h"></i><span class="hm2-dock-label">聊天设置</span></button>\n' +
+'      <button type="button" class="hm2-dock-item" data-hm2-action="stats"><i class="fas fa-chart-bar"></i><span class="hm2-dock-label">消息统计</span></button>\n' +
+'      <button type="button" class="hm2-dock-item" data-hm2-action="moments"><i class="fas fa-image"></i><span class="hm2-dock-label">朋友圈</span></button>\n' +
+'    </nav>\n' +
+'  </div>\n' +
+'  <div id="hm2StatsModal" class="hm2-modal">\n' +
+'    <div class="hm2-stats-box">\n' +
+'      <div class="hm2-stats-title">消息统计</div>\n' +
+'      <div id="hm2StatsBody"></div>\n' +
+'      <div class="modal-buttons hm2-stats-btns"><button type="button" class="modal-btn modal-btn-secondary" id="hm2StatsClose">关闭</button></div>\n' +
+'    </div>\n' +
+'  </div>\n' +
+'</div>';
+try {
+    if (typeof window !== 'undefined' && typeof window.hm2Home === 'object' && !window.__HM2_HTML__) window.__HM2_HTML__ = __HM2_TPL__;
+    if (typeof window !== 'undefined' && typeof window.initHomeLayoutFeature === 'function') {
+        try { window.initHomeLayoutFeature(); } catch (e) {}
+    }
+} catch (e) {}
+
+})();
+
 /* ===== 功能模块：lovediary（独立作用域） ===== */
 (function(){
 
