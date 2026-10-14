@@ -6013,6 +6013,11 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             border-radius: 16px; padding: 12px 22px; margin: 10px 0 18px;
         }
 
+        /* ===== 表情包 / 贴纸 缩略图尺寸限制（原来太大根本看不清） ===== */
+        .sticker-grid-item { max-width: 88px !important; max-height: 88px !important; }
+        .sticker-grid-item img { width: 100% !important; height: 100% !important; max-width: 88px !important; max-height: 88px !important; object-fit: contain !important; }
+        .reply-meme-thumb, .reply-meme-thumb img { max-width: 64px !important; max-height: 64px !important; object-fit: contain !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -7870,6 +7875,29 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
 
             function isPartnerSender(sender) {
                 return sender === 'partner' || (!!settings.partnerName && sender === settings.partnerName);
+            }
+            // ===== 全站昵称统一：把还写死「梦角 / 我」的界面文案改成实时昵称 =====
+            function syncDynamicNames() {
+                try {
+                    const nm = (settings.partnerName || '梦角');
+                    const esc = function (s) { try { return escapeHtml(s); } catch (e) { return s; } };
+                    const setTxt = function (id, t) { const e = document.getElementById(id); if (e && e.textContent !== t) e.textContent = t; };
+                    setTxt('blockSettingsText', '拉黑 ' + nm);
+                    setTxt('watch3ListSub', '和 ' + nm + ' 一起看点什么');
+                    const mb = document.getElementById('musicPartnerBtn');
+                    if (mb) mb.innerHTML = '<i class="fas fa-heart"></i> 让' + esc(nm) + '点歌';
+                    const w = document.querySelector('#togetherModal .together-whisper-label');
+                    if (w) w.innerHTML = '<i class="fas fa-comment-dots"></i> ' + esc(nm) + '想说的悄悄话';
+                    // 纯文本标签（梦角的状态 / 梦角）就地替换
+                    const nodes = document.querySelectorAll('#togetherModal div, #statusModal div, #settingsModal div');
+                    Array.prototype.forEach.call(nodes, function (d) {
+                        if (d.children && d.children.length === 0) {
+                            const tx = (d.textContent || '').trim();
+                            if (tx === '梦角的状态') d.textContent = nm + '的状态';
+                            else if (tx === '梦角') d.textContent = nm;
+                        }
+                    });
+                } catch (e) {}
             }
             function renderMessages() {
                 chatContainer.innerHTML = '';
@@ -11504,7 +11532,23 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 myAvatar.addEventListener('click', () => editAvatar('me'));
                 partnerName.addEventListener('click', () => editName('partner'));
                 myName.addEventListener('click', () => editName('me'));
-                            partnerStatus.addEventListener('click', () => {
+                            // 我的状态：点一下就能自由输入
+            try {
+                document.getElementById('myStatusContainer').addEventListener('click', async () => {
+                    ensureStatusShape();
+                    const cur = (featureData.status.mine && featureData.status.mine.text) || '';
+                    const v = await iosPrompt('设置我的状态（随便写）', { value: cur, title: '我的状态', placeholder: '例如：摸鱼中 / 想你了' });
+                    if (v === null) return;
+                    const txt = String(v).trim().slice(0, 20);
+                    featureData.status.mine.text = txt || '在线';
+                    saveData();
+                    try { statusRender(); } catch (e) {}
+                    try { togetherRender(); } catch (e) {}
+                    updateUI();
+                    showNotification('我的状态已更新', 'success');
+                });
+            } catch (e) {}
+            partnerStatus.addEventListener('click', () => {
                 // 按要求：梦角的状态只能由「状态字卡库」自动抽取更新，不允许用户自定义修改
                 showNotification('梦角的状态会从状态字卡库自动更新，不能手动修改', 'info', 2400);
             });                messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e
@@ -11958,6 +12002,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 set('togetherPartnerSpot', st2.partner.spot || '—');
                 set('togetherMyName', settings.myName || '我');
                 set('togetherPartnerName', settings.partnerName || '梦角');
+                syncDynamicNames();
             }
 
             // 梦角：随机天气 / 心情，状态文案从「状态字卡库」随机抽取
@@ -14458,6 +14503,7 @@ function avlMaybeSwap(force) {
         const src = getRandomItem(partner);
         avlSetCurrent('partner', src);
         showNotification(name + '换了个新头像', 'info', 2200);
+        try { addMessage({ sender: 'system', text: name + ' 更换了自己的头像', type: 'system' }); } catch (e) {}
         return { mode: 'self', partner: src };
     }
     const sameIndex = Math.random() < 0.5;
@@ -14473,6 +14519,10 @@ function avlMaybeSwap(force) {
     avlSetCurrent('mine', mi);
     avlSetCurrent('partner', pi);
     showNotification(name + '给你们俩都换了新头像', 'info', 2400);
+    try {
+        addMessage({ sender: 'system', text: name + ' 更换了自己的头像', type: 'system' });
+        addMessage({ sender: 'system', text: name + ' 更换了你的头像', type: 'system' });
+    } catch (e) {}
     return { mode: 'both', sameIndex: sameIndex, mine: mi, partner: pi };
 }
 
