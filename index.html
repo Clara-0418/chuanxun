@@ -3905,6 +3905,12 @@
             height: 100%;
         }
         html, body { height: 100%; max-height: 100%; overflow: hidden; overscroll-behavior: none; }
+        /* ===== 视口高度统一用 JS 同步的 --app-vh：iOS 键盘弹出 / 地址栏收缩时不再把页面顶长 ===== */
+        body { height: var(--app-vh, 100dvh) !important; max-height: var(--app-vh, 100dvh) !important; overflow: hidden !important; }
+        #homePage { height: auto !important; min-height: 0 !important; }
+        #homePage.active { height: var(--app-vh, 100dvh) !important; max-height: var(--app-vh, 100dvh) !important; }
+        .main-chat-area { min-height: 0 !important; padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important; }
+        .chat-container { min-height: 0 !important; overscroll-behavior: contain; }
         body {
             height: 100dvh; /* 支持时用动态视口高度，避开 iOS 地址栏抖动；不支持则回退 100vh */
             min-height: 100%;
@@ -7718,6 +7724,24 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     }).catch(function () {});
                 }
             } catch (e) {}
+
+            // iOS：键盘弹出 / 地址栏收缩时同步"真实可视高度"，避免页面被顶长或底部留白错位
+            function syncAppVh() {
+                try {
+                    var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+                    if (h > 0) document.documentElement.style.setProperty('--app-vh', Math.round(h) + 'px');
+                } catch (e) {}
+            }
+            syncAppVh();
+            try {
+                if (window.visualViewport) {
+                    window.visualViewport.addEventListener('resize', syncAppVh);
+                    window.visualViewport.addEventListener('scroll', syncAppVh);
+                }
+            } catch (e) {}
+            window.addEventListener('resize', syncAppVh);
+            window.addEventListener('orientationchange', function () { setTimeout(syncAppVh, 120); });
+            try { setInterval(syncAppVh, 1200); } catch (e) {}
 
             function startKeepAlive() {
                 if (keepAliveInterval) clearTimeout(keepAliveInterval);
