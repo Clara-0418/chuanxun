@@ -4759,6 +4759,45 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：hwset ===== */
+        /* ===== 主页底部「返回聊天」与左上角返回键重复：隐藏（节点保留，程序仍可 .click()） ===== */
+        #homeBackBtn { display: none !important; }
+
+        /* ===== 主页组件透明度（--hm2-alpha，可在组件设置里调） ===== */
+        #hm2Profile { position: relative !important; }
+        #hm2Profile, #hm2Clock, #hm2Features, #hm2Grid, #hm2Dots, #hm2Dock, .hm2-tile {
+            background-color: rgba(var(--secondary-bg-rgb, 255, 255, 255), var(--hm2-alpha, .1)) !important;
+        }
+
+        /* ===== 组件设置入口（资料卡右上角齿轮） ===== */
+        .hw-gear {
+            position: absolute !important; top: 10px; right: 10px; width: 30px; height: 30px; border-radius: 50%;
+            border: 1px solid var(--border-color); background: rgba(var(--secondary-bg-rgb,255,255,255), .4);
+            color: var(--text-secondary); display: flex; align-items: center; justify-content: center;
+            font-size: 13px; cursor: pointer; z-index: 3;
+        }
+        #hwSetModal {
+            display: none; position: fixed; inset: 0; z-index: 2600; background: rgba(0,0,0,.45);
+            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+            align-items: flex-end; justify-content: center;
+        }
+        .hw-sheet {
+            width: 100%; max-width: 430px; margin: 0 auto; background: var(--secondary-bg);
+            border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+            display: flex; flex-direction: column; gap: 8px; box-shadow: 0 -10px 30px rgba(0,0,0,.2);
+        }
+        .hw-title { font-size: 15px; font-weight: 700; color: var(--text-primary); text-align: center; margin-bottom: 4px; }
+        .hw-row { display: flex; align-items: center; justify-content: space-between; }
+        .hw-label { font-size: 13px; color: var(--text-primary); }
+        .hw-val { font-size: 12px; color: var(--text-secondary); }
+        .hw-range { width: 100%; accent-color: var(--accent-color); }
+        .hw-btn {
+            width: 100%; padding: 11px; border-radius: 12px; border: 1px solid var(--border-color);
+            background: var(--primary-bg); color: var(--text-primary); font-size: 13px; font-family: inherit; cursor: pointer;
+        }
+        .hw-close { background: var(--accent-color); color: #fff; border-color: transparent; font-weight: 600; margin-top: 4px; }
+
+
 /* ===== 功能模块：home2 ===== */
 #hm2Root{display:flex;flex-direction:column;align-items:center;width:100%;padding:10px 14px 0;box-sizing:border-box;font-family:var(--font-family);position:relative;z-index:1;}
 .hm2-wrap{width:min(100%,430px);display:flex;flex-direction:column;gap:10px;}
@@ -12024,7 +12063,7 @@ if (img) { viewImage(img.dataset.src); return; }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -12672,6 +12711,98 @@ if (img) { viewImage(img.dataset.src); return; }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：hwset（独立作用域） ===== */
+
+(function () {
+    var KEY = 'homeWidget';
+    function data() {
+        try {
+            if (!window.featureData) return { alpha: 10 };
+            if (!window.featureData[KEY] || typeof window.featureData[KEY] !== 'object') window.featureData[KEY] = { alpha: 10 };
+            var d = window.featureData[KEY];
+            var a = Number(d.alpha);
+            if (!isFinite(a)) a = 10;
+            d.alpha = Math.max(0, Math.min(100, a));
+            return d;
+        } catch (e) { return { alpha: 10 }; }
+    }
+    function apply() {
+        try { document.documentElement.style.setProperty('--hm2-alpha', String(data().alpha / 100)); } catch (e) {}
+    }
+    function save() { try { if (typeof saveData === 'function') saveData(); } catch (e) {} }
+    function el(id) { return document.getElementById(id); }
+    function close() { var m = el('hwSetModal'); if (m) m.style.display = 'none'; }
+    function open() {
+        var m = el('hwSetModal');
+        if (!m) return;
+        var d = data();
+        var rng = el('hwAlphaRange'), out = el('hwAlphaVal');
+        if (rng) rng.value = String(Math.round(d.alpha));
+        if (out) out.textContent = Math.round(d.alpha) + '%';
+        m.style.display = 'flex';
+    }
+    function build() {
+        if (el('hwSetModal')) return;
+        var wrap = document.createElement('div');
+        wrap.id = 'hwSetModal';
+        wrap.innerHTML =
+            '<div class="hw-sheet">' +
+            '<div class="hw-title">主页组件设置</div>' +
+            '<div class="hw-row"><span class="hw-label">组件透明度</span><span class="hw-val" id="hwAlphaVal">10%</span></div>' +
+            '<input id="hwAlphaRange" class="hw-range" type="range" min="0" max="100" step="5" value="10">' +
+            '<button class="hw-btn" id="hwAvatarMine">更换我的头像</button>' +
+            '<button class="hw-btn" id="hwAvatarPartner">更换梦角的头像</button>' +
+            '<button class="hw-btn" id="hwNameMine">修改我的昵称</button>' +
+            '<button class="hw-btn" id="hwNamePartner">修改梦角的昵称</button>' +
+            '<button class="hw-btn" id="hwAnniv">纪念日 / 在一起时长</button>' +
+            '<button class="hw-btn hw-close" id="hwClose">完成</button>' +
+            '</div>';
+        document.body.appendChild(wrap);
+        wrap.addEventListener('click', function (e) { if (e.target === wrap) { save(); close(); } });
+        var rng = el('hwAlphaRange');
+        if (rng) {
+            rng.addEventListener('input', function () {
+                var v = Math.round(Number(rng.value) || 0);
+                var out = el('hwAlphaVal');
+                if (out) out.textContent = v + '%';
+                data().alpha = v;
+                apply();
+            });
+            rng.addEventListener('change', save);
+        }
+        var c = el('hwClose'); if (c) c.addEventListener('click', function () { save(); close(); });
+        function openAvatarLib() {
+            close();
+            var b = el('avatarLibCard');
+            if (b) { b.click(); return; }
+            try { if (typeof showModal === 'function') showModal(el('avatarLibModal')); } catch (e) {}
+        }
+        var am = el('hwAvatarMine'); if (am) am.addEventListener('click', openAvatarLib);
+        var ap = el('hwAvatarPartner'); if (ap) ap.addEventListener('click', openAvatarLib);
+        var nm = el('hwNameMine');
+        if (nm) nm.addEventListener('click', function () { close(); try { if (typeof editName === 'function') editName('me'); } catch (e) {} });
+        var np = el('hwNamePartner');
+        if (np) np.addEventListener('click', function () { close(); try { if (typeof editName === 'function') editName('partner'); } catch (e) {} });
+        var an = el('hwAnniv');
+        if (an) an.addEventListener('click', function () { close(); try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
+    }
+    function gear() {
+        var card = el('hm2Profile');
+        if (!card || el('hwGearBtn')) return;
+        var b = document.createElement('button');
+        b.id = 'hwGearBtn';
+        b.className = 'hw-gear';
+        b.type = 'button';
+        b.setAttribute('aria-label', '主页组件设置');
+        b.innerHTML = '<i class="fas fa-sliders-h"></i>';
+        b.addEventListener('click', function (e) { e.stopPropagation(); open(); });
+        card.appendChild(b);
+    }
+    function init() { try { apply(); build(); gear(); } catch (e) {} }
+    window.initHomeWidgetSettings = init;
+    window.homeWidgetInternal = { apply: apply, open: open, close: close, data: data, gear: gear };
+    try { setTimeout(init, 400); setInterval(gear, 1500); } catch (e) {}
+})();
 /* ===== 功能模块：home2（独立作用域） ===== */
 var HM2_PAGE_SIZE = 500;   // 所有磁贴放同一页（不分页）
 (function(){
