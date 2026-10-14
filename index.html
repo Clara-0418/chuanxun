@@ -12670,6 +12670,7 @@ if (img) { viewImage(img.dataset.src); return; }
 
             /* @@FEATURE_JS@@ */
 /* ===== 功能模块：home2（独立作用域） ===== */
+var HM2_PAGE_SIZE = 500;   // 所有磁贴放同一页（不分页）
 (function(){
 
 (function () {
@@ -12906,12 +12907,12 @@ if (img) { viewImage(img.dataset.src); return; }
             grid.dataset.hm2Sig = sig;
             grid.innerHTML = items.map(tileHtml).join('');
         }
-        var pages = Math.max(1, Math.ceil(items.length / 8));
+        var pages = Math.max(1, Math.ceil(items.length / HM2_PAGE_SIZE));
         if (forceReset) STATE.activePage = 0;
         if (STATE.activePage > pages - 1) STATE.activePage = pages - 1;
         var tiles = grid.querySelectorAll('.hm2-tile');
         for (var i = 0; i < tiles.length; i++) {
-            var mine = (i / 8 | 0) === STATE.activePage;
+            var mine = (i / HM2_PAGE_SIZE | 0) === STATE.activePage;
             tiles[i].style.display = mine ? 'flex' : 'none';
         }
         renderDots(pages);
@@ -12947,6 +12948,7 @@ if (img) { viewImage(img.dataset.src); return; }
     function renderDots(pages) {
         var dots = byId('hm2Dots');
         if (!dots) return;
+        dots.style.display = (pages <= 1) ? 'none' : 'flex';   // 只有一页时不显示圆点
         if (dots.dataset.hm2Pages !== String(pages) || dots.children.length !== pages) {
             var html = '';
             for (var p = 0; p < pages; p++) {
@@ -12961,14 +12963,14 @@ if (img) { viewImage(img.dataset.src); return; }
         }
     }
     function goPage(p) {
-        var pages = Math.max(1, Math.ceil(STATE.items.length / 8));
+        var pages = Math.max(1, Math.ceil(STATE.items.length / HM2_PAGE_SIZE));
         p = Number(p);
         if (isNaN(p) || p < 0 || p > pages - 1) return false;
         STATE.activePage = p;
         var grid = byId('hm2Grid');
         if (grid) {
             var tiles = grid.querySelectorAll('.hm2-tile');
-            for (var i = 0; i < tiles.length; i++) tiles[i].style.display = ((i / 8 | 0) === p) ? 'flex' : 'none';
+            for (var i = 0; i < tiles.length; i++) tiles[i].style.display = ((i / HM2_PAGE_SIZE | 0) === p) ? 'flex' : 'none';
         }
         renderDots(pages);
         return true;
