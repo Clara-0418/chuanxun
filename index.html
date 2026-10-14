@@ -593,7 +593,7 @@
 
         /* ===== 头部 ===== */
         .header {
-            padding-top: env(safe-area-inset-top, 0);
+            padding-top: max(env(safe-area-inset-top, 0px), 26px);   // 灵动岛/刘海留白
             border-bottom: 1px solid var(--border-color);
             background: rgba(var(--header-bg-rgb, 255, 255, 255), 0.82);
             backdrop-filter: blur(12px);
@@ -3919,7 +3919,7 @@
             padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         .header {
-            padding-top: env(safe-area-inset-top, 0px);
+            padding-top: max(env(safe-area-inset-top, 0px), 26px);
         }
         .modal-content {
             -webkit-overflow-scrolling: touch;
@@ -7383,7 +7383,24 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         };
                         data.savedAt = Date.now();
                         // 同步写一份 localStorage 镜像：意外退出/被系统杀进程时也能恢复
-                        try { window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(data)); } catch (e) {}
+                        try {
+                            window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(data));
+                        } catch (e) {
+                            // 图片类数据把 5MB 配额撑爆时：写一份不含图片的轻量镜像，
+                            // 至少保证设置 / 昵称 / 字卡 / 消息不丢（图片仍在 IndexedDB 里）。
+                            try {
+                                var light = Object.assign({}, data);
+                                var fd = Object.assign({}, light.featureData || {});
+                                if (fd.avatarLib) fd.avatarLib = { mine: [], partner: [], currentMine: fd.avatarLib.currentMine, currentPartner: fd.avatarLib.currentPartner };
+                                if (fd.homePageBg) fd.homePageBg = { image: '', color: fd.homePageBg.color, overlay: fd.homePageBg.overlay };
+                                if (fd.togetherBg) fd.togetherBg = { image: '', color: fd.togetherBg.color, overlay: fd.togetherBg.overlay };
+                                if (fd.loveDiary && fd.loveDiary.bg) fd.loveDiary.bg = { image: '', color: fd.loveDiary.bg.color, overlay: fd.loveDiary.bg.overlay };
+                                if (fd.companyDiary && fd.companyDiary.bg) fd.companyDiary.bg = { image: '', color: fd.companyDiary.bg.color, overlay: fd.companyDiary.bg.overlay };
+                                light.featureData = fd;
+                                if (light.settings && light.settings.chatBgImage) light.settings.chatBgImage = '';
+                                window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(light));
+                            } catch (e2) {}
+                        }
                         return storageSet(getStorageKey('appData'), data).catch(e => console.warn('Save error:',
                             e));
                     } catch (e) { console.warn('Save error:', e); }
@@ -11562,6 +11579,7 @@ if (img) { viewImage(img.dataset.src); return; }
                     if (v === null) return;
                     const txt = String(v).trim().slice(0, 20);
                     featureData.status.mine.text = txt || '在线';
+                    featureData.status.mine.emoji = '';   // 自定义状态不加任何 emoji
                     saveData();
                     try { statusRender(); } catch (e) {}
                     try { togetherRender(); } catch (e) {}
@@ -11925,7 +11943,7 @@ if (img) { viewImage(img.dataset.src); return; }
             }
 
             // ===== 你我之间：步数 / 足迹 / 天气（抓手机数据）/ 昵称 =====
-            const TOGETHER_SPOTS = ['家', '公司', '地铁上', '咖啡馆', '公园', '超市', '健身房', '书店', '江边', '学校'];
+            const TOGETHER_SPOTS = ['家', '公司', '地铁上', '咖啡馆', '公园', '超市', '健身房', '书店', '江边', '海边'];
 
             function togetherEnsureExtra() {
                 ensureStatusShape();
@@ -12035,7 +12053,13 @@ if (img) { viewImage(img.dataset.src); return; }
                 const m = entry.match(/^(\S{1,3})\s+(.*)$/);
                 st.partner.emoji = m ? m[1] : '💗';
                 st.partner.text = m ? (m[2] || entry) : entry;
-                st.partner.weather = getRandomItem(WEATHER_PRESETS) || { emoji: '☀️', text: '晴' };
+                var pw = getRandomItem(WEATHER_PRESETS) || { emoji: '☀️', text: '晴' };   // 梦角天气：文案 + 随机温度
+                var lo = 12, hi = 30;
+                if (/雪/.test(pw.text)) { lo = -6; hi = 4; }
+                else if (/雨|雷/.test(pw.text)) { lo = 8; hi = 22; }
+                else if (/晴/.test(pw.text)) { lo = 18; hi = 34; }
+                else if (/雾|阴/.test(pw.text)) { lo = 6; hi = 20; }
+                st.partner.weather = { emoji: pw.emoji, text: pw.text + ' ' + getRandomInt(lo, hi) + '°' };
                 st.partner.mood = getRandomItem(MOOD_PRESETS) || { emoji: '😊', text: '开心' };
                 st.partner.updatedAt = Date.now();
                 saveData();
