@@ -6148,6 +6148,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== 主页底部的「返回聊天」按钮：与左上角返回键重复，隐藏掉（节点保留，程序仍可调用 .click()） ===== */
         #homeBackBtn { display: none !important; }
 
+        /* ===== 主页悬浮的「更换主页背景」按钮：收进组件设置面板，主页无缝全屏 ===== */
+        #lovHomeBgBtn { display: none !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -12754,6 +12757,7 @@ if (img) { viewImage(img.dataset.src); return; }
             '<button class="hw-btn" id="hwAvatarPartner">更换梦角的头像</button>' +
             '<button class="hw-btn" id="hwNameMine">修改我的昵称</button>' +
             '<button class="hw-btn" id="hwNamePartner">修改梦角的昵称</button>' +
+            '<button class="hw-btn" id="hwBg">更换主页背景</button>' +
             '<button class="hw-btn" id="hwAnniv">纪念日 / 在一起时长</button>' +
             '<button class="hw-btn hw-close" id="hwClose">完成</button>' +
             '</div>';
@@ -12783,6 +12787,8 @@ if (img) { viewImage(img.dataset.src); return; }
         if (nm) nm.addEventListener('click', function () { close(); try { if (typeof editName === 'function') editName('me'); } catch (e) {} });
         var np = el('hwNamePartner');
         if (np) np.addEventListener('click', function () { close(); try { if (typeof editName === 'function') editName('partner'); } catch (e) {} });
+        var bg = el('hwBg');
+        if (bg) bg.addEventListener('click', function () { close(); var b = el('lovHomeBgBtn'); if (b) { b.click(); return; } try { if (window.lovDiaryInternal && window.lovDiaryInternal.setBg) {} } catch (e) {} });
         var an = el('hwAnniv');
         if (an) an.addEventListener('click', function () { close(); try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
     }
