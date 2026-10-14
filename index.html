@@ -6063,6 +6063,27 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .sticker-grid-item img { width: 100% !important; height: 100% !important; max-width: 88px !important; max-height: 88px !important; object-fit: contain !important; }
         .reply-meme-thumb, .reply-meme-thumb img { max-width: 64px !important; max-height: 64px !important; object-fit: contain !important; }
 
+        /* ===== 朋友圈：全屏显示 ===== */
+        #momentModal.moment-modal { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important; }
+        #momentModal .moment-content {
+            width: 100% !important; max-width: 100% !important;
+            height: 100dvh !important; max-height: 100dvh !important;
+            border-radius: 0 !important; margin: 0 !important; display: flex !important; flex-direction: column !important;
+        }
+        #momentModal .moment-header {
+            padding-top: max(env(safe-area-inset-top, 0px), 26px) !important;
+            position: sticky !important; top: 0 !important; z-index: 6 !important;
+            background: var(--secondary-bg) !important;
+        }
+        #momentModal .moment-content > * { max-width: 100% !important; }
+        /* 兜底：聊天区里任何没被识别的裸节点，也按气泡排版，避免"漏出未美化的消息" */
+        #chatContainer > div:not([class]):not(:empty) {
+            margin: 4px 12px !important; padding: 9px 13px !important;
+            background: var(--message-received-bg, var(--secondary-bg)) !important;
+            border-radius: 16px !important; font-size: 14px !important; line-height: 1.5 !important;
+            word-break: break-word !important; align-self: flex-start !important; max-width: 78% !important;
+        }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
