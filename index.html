@@ -7226,6 +7226,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 audioOsc = null,
                 audioScheduled = false;
             let bgAudio = null; // 后台保活用的静音媒体元素（锁屏 / 灵动岛可见）
+            let lastMirrorAt = 0; // localStorage 镜像上次写入时间（节流用）
 
             // ===== DOM 引用 =====
             const $ = (s) => document.querySelector(s);
@@ -7351,7 +7352,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 setTimeout(run, 32);
             }
             // 长会话只渲染最近 N 条，避免手机端 DOM/内存无限膨胀（数据本身完整保留）
-            const RENDER_WINDOW_STEP = 200;
+            const RENDER_WINDOW_STEP = 120;   // 每次渲染的 DOM 条数（长会话性能）
             let renderWindowSize = RENDER_WINDOW_STEP;
             // 按渲染节点反查消息对象：优先 id，兼容无 id 的旧数据（用渲染时记录的索引兜底）
             function findMessageByWrapper(wrapper) {
@@ -7428,6 +7429,12 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         };
                         data.savedAt = Date.now();
                         // 同步写一份 localStorage 镜像：意外退出/被系统杀进程时也能恢复
+                        // 镜像节流（性能关键）：以前每条消息都要把全部数据 JSON.stringify 一次并同步写盘，
+                        // 消息一多就卡。现在最多每 10 秒写一次；页面隐藏/退出时强制写，保证不丢。
+                        const __mirrorNow = Date.now();
+                        const __mirrorForce = !!(typeof document !== 'undefined' && document.hidden);
+                        if (__mirrorForce || __mirrorNow - lastMirrorAt > 10000) {
+                            lastMirrorAt = __mirrorNow;
                         try {
                             window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(data));
                         } catch (e) {
@@ -7445,6 +7452,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                                 if (light.settings && light.settings.chatBgImage) light.settings.chatBgImage = '';
                                 window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(light));
                             } catch (e2) {}
+                        }
                         }
                         return storageSet(getStorageKey('appData'), data).catch(e => console.warn('Save error:',
                             e));
@@ -7681,6 +7689,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             // ===== 保活 & 推送 =====
+            // 申请持久化存储：浏览器不会因"空间不足"随便清理本站数据（相当于扩容 + 保命）
+            try {
+                if (navigator.storage && navigator.storage.persist) {
+                    navigator.storage.persist().then(function (ok) {
+                        if (ok) console.log('[storage] 已获得持久化存储');
+                    }).catch(function () {});
+                }
+            } catch (e) {}
+
             function startKeepAlive() {
                 if (keepAliveInterval) clearTimeout(keepAliveInterval);
                 if (settings.keepAliveEnabled) {
