@@ -9456,8 +9456,16 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 // 没设置封面时清空内联背景，保留 CSS 里的默认渐变（设成 'none' 会把渐变一起干掉）
                 if (cover) cover.style.backgroundImage = prof.cover ? `url("${prof.cover}")` : '';
                 const av = document.getElementById('momentAvatar');
-                if (av) av.innerHTML = prof.avatar ? `<img src="${escapeHtml(prof.avatar)}" alt="">` :
-                    '<i class="fas fa-user"></i>';
+if (av) {
+    // 跟随聊天页面的头像：优先头像库里当前选中的「我的头像」，其次读聊天页顶部头像
+    let avSrc = '';
+    try {
+        const lib = (featureData.avatarLib && featureData.avatarLib.currentMine) || '';
+        const chatAv = (typeof getUserAvatar === 'function') ? (getUserAvatar('me') || getUserAvatar()) : '';
+        avSrc = lib || chatAv || prof.avatar || '';
+    } catch (e) { avSrc = prof.avatar || ''; }
+    av.innerHTML = avSrc ? `<img src="${escapeHtml(avSrc)}" alt="">` : '<i class="fas fa-user"></i>';
+}
                 const nick = document.getElementById('momentNickname');
                 if (nick) nick.textContent = settings.myName || '我';
                 const sig = document.getElementById('momentSignature');
@@ -9596,8 +9604,21 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 if (!list || list.dataset.bound === '1') return;
                 list.dataset.bound = '1';
                 list.addEventListener('click', (e) => {
-                    const img = e.target.closest('.moment-images img');
-                    if (img) { viewImage(img.dataset.src); return; }
+                    // 点别人的评论 = 回复（自动填 @昵称）
+const cmt = e.target.closest('.moment-comment');
+if (cmt) {
+    const box = cmt.closest('.moment-body');
+    const field = box ? box.querySelector('.moment-comment-field') : null;
+    if (field) {
+        const cnameEl = cmt.querySelector('.cname');
+        const nm = cnameEl ? cnameEl.textContent.trim() : '';
+        field.value = nm ? ('@' + nm + ' ') : '';
+        try { field.focus(); } catch (e) {}
+    }
+    return;
+}
+const img = e.target.closest('.moment-images img');
+if (img) { viewImage(img.dataset.src); return; }
                     const menuBtn = e.target.closest('.moment-menu-btn');
                     if (menuBtn) {
                         const popup = list.querySelector(`.moment-actions-popup[data-popup="${menuBtn.dataset.menu}"]`);
@@ -9823,7 +9844,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         if (target) {
                             target.__reactedAt = Date.now();
                             partnerReactToMoment(target.id);
-                            if (Math.random() * 100 < commentChance) partnerCommentOnMoment(target.id);
+                            if (Math.random() * 100 < commentChance * 0.4) partnerCommentOnMoment(target.id);   // 放慢：评论概率降到四成
                         }
                     }
                 }, freq * 60 * 1000);
@@ -12021,6 +12042,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 try { statusRender(); } catch (e) {}
                 try { togetherRender(); } catch (e) {}
                 try { updateStatusChip(); } catch (e) {}
+                try { updateUI(); } catch (e) {}
                 if (!silent) showNotification(`${settings.partnerName || '梦角'}的状态：${st.partner.emoji} ${st.partner.text}`, 'info', 2000);
             }
 
@@ -12863,7 +12885,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         lovPartnerComment(id, at); return true;   // 无定时器环境：立即写入
     }
     // ===== 礼物柜：只读 featureData.giftShelf（商城模块写入）。「收到的礼物」= 收礼方是我，兼容早期没写 to 的数据 =====
-    function lovGifts() { var arr = lovData().giftShelf; return Array.isArray(arr) ? arr.filter(function(g) { return g && typeof g === 'object' && g.to !== 'partner'; }) : []; }
+    var lovGiftTimer = null;
+function lovGifts() { var arr = lovData().giftShelf; return Array.isArray(arr) ? arr.filter(function(g) { return g && typeof g === 'object'; }) : []; }   // 送出与收到的都进礼物柜
     function lovWho(v) { return (v === 'me') ? lovMyName() : (v === 'partner') ? lovPartnerName() : ((typeof v === 'string' && v.trim()) ? v.trim().slice(0, 12) : '神秘人'); }
     // ===== 背景：恋爱日记 / 主页 / 你我之间（蒙层用渐变层叠在图上，不用阴影发光） =====
     function lovScrim(ov) { var a = lovOverlay(ov) / 100; return 'linear-gradient(rgba(0,0,0,' + a + '), rgba(0,0,0,' + a + '))'; }
@@ -13044,7 +13067,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         if (!list.length) { box.innerHTML = '<div class="lov-empty">礼物柜还是空的，去商城挑一件吧</div>'; return; }
         box.innerHTML = list.map(function(g) {
             var n = Number(g.price), ts = lovNum(g.createdAt, 0), price = (Number.isFinite(n) && n > 0) ? ('¥' + (Math.round(n * 100) / 100)) : '';
-            var meta = '来自 ' + lovWho(g.from) + (price ? ' · ' + price : '') + (ts ? ' · ' + lovTodayStr(new Date(ts)) : '');
+            var dir = (g.to === 'partner') ? ('送给 ' + lovWho('partner')) : ('来自 ' + lovWho(g.from));
+var meta = dir + (price ? ' · ' + price : '') + (ts ? ' · ' + lovTodayStr(new Date(ts)) : '');
             return '<div class="lov-gift"><div class="lov-gift-name">' + lovEsc(g.name || '未命名礼物') + '</div><div class="lov-gift-meta">' + lovEsc(meta) + '</div></div>';
         }).join('');
     }
@@ -13392,6 +13416,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         lovRenderAll(); lovApplyAllBg();
         if (made) lovNotify(lovPartnerName() + '点评了你的日记', 'info');
         w = lovW(); m = lovEl('lovDiaryModal'); if (m && w && w.showModal) w.showModal(m); else if (m) m.style.display = 'flex';
+    // 面板开着的时候每 6 秒刷一次礼物柜，商城刚买的礼物能立刻出现
+    try {
+        if (lovGiftTimer) clearInterval(lovGiftTimer);
+        lovGiftTimer = setInterval(function () {
+            var mm = lovEl('lovDiaryModal');
+            if (!mm || mm.style.display === 'none' || mm.offsetParent === null) { clearInterval(lovGiftTimer); lovGiftTimer = null; return; }
+            try { lovRenderGifts(); } catch (e) {}
+        }, 6000);
+    } catch (e) {}
         return true;
     }
     window.initLoveDiaryFeature = initLoveDiaryFeature;
