@@ -793,7 +793,7 @@
             flex: 1;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 12px 12px 6px;
+            padding: 12px 12px 2px;
             display: flex;
             flex-direction: column;
             gap: 2px;
@@ -3952,7 +3952,7 @@
         }
         #homePage .home-scroll { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; flex: 0 0 auto !important; }
         #homePage #hm2Root { flex: 0 0 auto !important; width: 100% !important; }
-        .main-chat-area { min-height: 0 !important; padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important; }
+        .main-chat-area { min-height: 0 !important; padding-bottom: calc(54px + env(safe-area-inset-bottom, 0px)) !important; }
         .chat-container { min-height: 0 !important; overscroll-behavior: contain; }
         body {
             height: 100dvh; /* 支持时用动态视口高度，避开 iOS 地址栏抖动；不支持则回退 100vh */
@@ -6214,6 +6214,29 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== 主页底部发黑修正：无自定义背景时用主题底色 ===== */
         #homePage.active { background-color: var(--primary-bg) !important; }
         body.lov-home-bg-full #homePage.active { background-color: transparent !important; }
+
+        /* ===== 应用内消息弹窗（原 CSS 缺失，导致它以裸块渲染在页面底部、把聊天顶上去） ===== */
+        #inAppMsgPopup {
+            position: fixed !important; left: 12px !important; right: 12px !important;
+            bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+            z-index: 70 !important; display: none; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 16px;
+            background: rgba(var(--secondary-bg-rgb, 255, 255, 255), .96);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+            -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+        }
+        #inAppMsgPopup.show { display: flex !important; }
+        #inAppMsgPopup .ia-avatar {
+            width: 36px !important; height: 36px !important; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background-color: var(--primary-bg); background-size: cover; background-position: center;
+            color: var(--text-secondary); font-size: 13px;
+        }
+        #inAppMsgPopup .ia-avatar img { width: 100% !important; height: 100% !important; object-fit: cover; }
+        #inAppMsgPopup .ia-body { flex: 1; min-width: 0; }
+        #inAppMsgPopup .ia-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+        #inAppMsgPopup .ia-text { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 </style>
 </head>
@@ -12342,6 +12365,8 @@ if (img) { viewImage(img.dataset.src); return; }
                 const m = entry.match(/^(\S{1,3})\s+(.*)$/);
                 st.partner.emoji = m ? m[1] : '💗';
                 st.partner.text = m ? (m[2] || entry) : entry;
+    // 同步写一份到 settings.partnerStatus —— 聊天页胶囊是 updateUI() 从这个字段渲染的，不写就会显示旧的「在线」
+    try { settings.partnerStatus = (st.partner.emoji || '') + ' ' + st.partner.text; } catch (e) {}
     // 立即刷新聊天页顶部状态胶囊（保证不因后续异常漏更新）
     try { var _chip = document.getElementById('partnerStatus'); if (_chip) { var _sp = _chip.querySelector('span'); if (_sp) _sp.textContent = st.partner.emoji + ' ' + st.partner.text; } } catch (e) {}
                 try {
@@ -12369,8 +12394,8 @@ if (img) { viewImage(img.dataset.src); return; }
                 if (partnerStatusTimer) clearInterval(partnerStatusTimer);
                 partnerStatusTimer = setInterval(() => {
                     if (settings.isBlocked) return;
-                    if (Math.random() < 0.55) partnerRandomizeStatus(true);
-                }, 150000);
+                    if (Math.random() < 0.7) partnerRandomizeStatus(true);
+                }, 90000);
             }
 
             function togetherOpenModal() {
