@@ -6886,7 +6886,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== 应用内消息弹窗（原 CSS 缺失，导致它以裸块渲染在页面底部、把聊天顶上去） ===== */
         #inAppMsgPopup {
             position: fixed !important; left: 12px !important; right: 12px !important;
-            bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+            top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
             z-index: 70 !important; display: none; align-items: center; gap: 10px;
             padding: 10px 12px; border-radius: 16px;
             background: rgba(var(--secondary-bg-rgb, 255, 255, 255), .96);
@@ -6911,6 +6911,13 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .moment-comment .cname { display: inline !important; white-space: normal !important; word-break: break-word !important; }
         .moment-comment span { word-break: break-word !important; overflow-wrap: anywhere !important; }
         .moment-interact, .moment-body { word-break: break-word !important; overflow-wrap: anywhere !important; }
+
+        /* ===== 商品卡片徽标（已帮TA付 / 已代付） ===== */
+        .product-card-badge {
+            margin-top: 6px; display: inline-block; padding: 3px 12px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; color: #fff; background: var(--accent-color);
+        }
+        .product-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 </style>
 </head>
@@ -7175,7 +7182,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         </div>
         <div class="shop2-searchrow">
             <input type="search" class="shop2-search" id="shop2Search" placeholder="搜索商品..." autocomplete="off">
-            <button class="shop2-wish" type="button" data-shop2-act="wish">✎ 许愿<span class="shop2-wish-num" id="shop2WishNum" hidden></span></button>
+            <button class="shop2-wish" type="button" data-shop2-act="wish">✎ 上架商品<span class="shop2-wish-num" id="shop2WishNum" hidden></span></button>
         </div>
         <div class="shop2-tabs" id="shop2Tabs">
             <button class="shop2-tab active" type="button" data-shop2-tab="rec">推荐</button>
@@ -9193,7 +9200,12 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         bubble.style.transform = `scale(${scale})`;
                         bubble.style.transformOrigin = 'center';
                         let content = '';
-                if (msg.product) content += productCardHtml(msg.product);
+    if (msg.product) {
+                    var _mt = String(msg.text || ''), _pb = '';
+                    if (/已帮TA付|帮你付了|帮TA付/.test(_mt)) _pb = '已帮TA付';
+                    else if (/代付/.test(_mt)) _pb = '已代付';
+                    content += productCardHtml(msg.product, _pb);
+                }
                         if (msg.text) content += `<div>${escapeHtml(msg.text).replace(/\n/g, '<br>')}</div>`;
                         if (msg.image) content +=
                             `<img src="${escapeHtml(msg.image)}" style="max-width:120px;border-radius:8px;display:block;margin-top:4px;cursor:pointer;" onclick="viewImage('${escapeJsAttr(msg.image)}')" loading="lazy" decoding="async">`;
@@ -9311,6 +9323,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             let inAppPopupTimer = null;
 
             function showInAppMessagePopup(name, text, avatar) {
+            /* 按用户要求：只有离开聊天页（在主页）时才弹站内提醒 */
+            try { var _hp = document.getElementById('homePage'); if (!_hp || !_hp.classList.contains('active')) return; } catch (e) { return; }
                 try {
                     let box = document.getElementById('inAppMsgPopup');
                     if (!box) {
@@ -9332,13 +9346,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             // 商品卡片（购买 / 代付消息在气泡里显示商品样式）
-            function productCardHtml(p) {
+            function productCardHtml(p, badge) {
+            /* badge: 已帮TA付 / 已代付 */
                 if (!p) return '';
                 const price = Number(p.price);
                 const priceText = isFinite(price) ? '¥' + price.toFixed(2) : '';
+        const _badge = badge ? '<div class="product-card-badge">' + escapeHtml(String(badge)) + '</div>' : '';
                 return `<div class="product-card"><div class="product-card-icon">${escapeHtml(p.icon || '礼')}</div>` +
                     `<div class="product-card-info"><div class="product-card-name">${escapeHtml(p.name || '商品')}</div>` +
-                    (priceText ? `<div class="product-card-price">${priceText}</div>` : '') + `</div></div>`;
+                    (priceText ? `<div class="product-card-price">${priceText}</div>` : '') + `</div>` + _badge + `</div>`;
             }
 
             // 梦角随机收藏：消息 / 朋友圈（不需要用户操作）
@@ -13019,7 +13035,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             }
 
             // ===== 你我之间：步数 / 足迹 / 天气（抓手机数据）/ 昵称 =====
-            const TOGETHER_SPOTS = ['家', '公司', '地铁上', '咖啡馆', '公园', '超市', '健身房', '书店', '江边', '海边'];
+            const TOGETHER_SPOTS = ['家', '公司', '地铁上', '咖啡馆', '公园', '超市', '健身房', '夜市', '江边', '海边'];
 
             function togetherEnsureExtra() {
                 ensureStatusShape();
@@ -13127,8 +13143,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 const pool = (Array.isArray(statusReplies) && statusReplies.length) ? statusReplies : DEFAULT_STATUS_REPLIES;
                 const entry = String(getRandomItem(pool) || '💗 在想你');
                 const m = entry.match(/^(\S{1,3})\s+(.*)$/);
-                st.partner.emoji = m ? m[1] : '💗';
-                st.partner.text = m ? (m[2] || entry) : entry;
+                st.partner.emoji = '';   // 按用户要求：直接用状态字卡原文，不加 emoji
+    st.partner.text = String(entry).replace(/^[^0-9A-Za-z\u4e00-\u9fa5]+/, '') || String(entry);
     // 同步写一份到 settings.partnerStatus —— 聊天页胶囊是 updateUI() 从这个字段渲染的，不写就会显示旧的「在线」
     try { settings.partnerStatus = (st.partner.emoji || '') + ' ' + st.partner.text; } catch (e) {}
     // 立即刷新聊天页顶部状态胶囊（保证不因后续异常漏更新）
@@ -14064,6 +14080,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     }
     // 许愿：界面层数据 + 用既有 addMessage 发一条消息（不改任何数据键）
     async function wish() {
+        /* 按用户要求：这个按钮是「自定义上架商品」，不是许愿 */
+        try { if (typeof addProduct === 'function') { addProduct(); return true; } } catch (e) {}
         const v = await promptText('想要什么？说给我听，我记着。', { placeholder: '例如：想要一束洋桔梗' });
         const w = txt(v, 24);
         if (!w) return false;
@@ -15098,7 +15116,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     }
     function mm2RecordOpen() {
         var ok = false;
-        try { if (mm2RecordVisit('me')) ok = true; } catch (e) {}
+        /* 按用户要求：访客记录里只出现梦角，不记录我自己 */
         try { if (mm2RecordPartnerVisit()) ok = true; } catch (e2) {}
         try { if (mm2RandomVisits()) ok = true; } catch (e3) {}
         mm2VisitsRendered = false;
@@ -15115,7 +15133,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             var list = mm2Visits();
             var n = 1 + Math.floor(Math.random() * 3);
             for (var i = 0; i < n; i++) {
-                list.push({ userId: Math.random() < 0.5 ? 'me' : 'partner', at: now - Math.floor(Math.random() * 120 * 60000) });
+                list.push({ userId: 'partner', at: now - Math.floor(Math.random() * 120 * 60000) });
             }
             list.sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
             if (list.length > 300) list.splice(0, list.length - 300);
