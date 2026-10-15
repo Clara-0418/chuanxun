@@ -13702,7 +13702,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
         var now = Date.now();
         for (var i = list.length - 1; i >= 0 && i >= list.length - 6; i--) {
             var v = list[i];
-            if (v && v.userId === uid && num(now - v.at, 1e9) < 600000) return false; /* 10 分钟内同一人只记一条 */
+            if (v && v.userId === uid && num(now - v.at, 1e9) < 60000) return false; /* 1 分钟内同一人只记一条 */
         }
         list.push({ userId: uid, at: now });
         if (list.length > 300) list.splice(0, list.length - 300);
@@ -13711,17 +13711,36 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     }
     function mm2RecordPartnerVisit() {
         if (mm2Settings().isBlocked) return false;
-        if (Math.random() > 0.5) return false;   /* 梦角是否留下访客记录按概率判定，避免每次打开都刷一条 */
+        if (Math.random() > 0.8) return false;   /* 梦角访客记录：80% 概率留下 */
         return mm2RecordVisit('partner');
     }
     function mm2RecordOpen() {
         var ok = false;
         try { if (mm2RecordVisit('me')) ok = true; } catch (e) {}
         try { if (mm2RecordPartnerVisit()) ok = true; } catch (e2) {}
+        try { if (mm2RandomVisits()) ok = true; } catch (e3) {}
         mm2VisitsRendered = false;
         return ok;
     }
 
+    /* 随机生成一批访客记录（我和梦角都有），时间用真实时间戳（最近 2 小时内） */
+    function mm2RandomVisits() {
+        try {
+            var store = mm2Store();
+            var now = Date.now();
+            if (store.lastVisitGen && now - store.lastVisitGen < 300000) return false;
+            store.lastVisitGen = now;
+            var list = mm2Visits();
+            var n = 1 + Math.floor(Math.random() * 3);
+            for (var i = 0; i < n; i++) {
+                list.push({ userId: Math.random() < 0.5 ? 'me' : 'partner', at: now - Math.floor(Math.random() * 120 * 60000) });
+            }
+            list.sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+            if (list.length > 300) list.splice(0, list.length - 300);
+            mm2Save();
+            return true;
+        } catch (e) { return false; }
+    }
     function mm2RenderVisits() {
         var box = $('mm2VisitList');
         if (!box) return false;
