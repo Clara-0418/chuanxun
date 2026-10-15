@@ -12134,7 +12134,7 @@ if (img) { viewImage(img.dataset.src); return; }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -12782,6 +12782,112 @@ if (img) { viewImage(img.dataset.src); return; }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：slim（存储体检） ===== */
+(function(){
+(function () {
+    var MAX_AVATAR_BYTES = 60 * 1024;   // 单个头像超过 60KB 就重压
+    var MAX_PER_LIB = 30;               // 每个头像库最多保留 30 张
+    var MAX_BG_BYTES = 700 * 1024;      // 单张背景超过 700KB 就重压
+    var done = false;
+
+    function sq(o) { try { return JSON.stringify(o).length; } catch (e) { return 0; } }
+    function notify(t, k) { try { if (typeof showNotification === 'function') showNotification(t, k || 'info', 3200); } catch (e) {} }
+
+    function recompress(dataUrl, maxSide, quality, cb) {
+        try {
+            var img = new Image();
+            img.onload = function () {
+                try {
+                    var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+                    if (!w || !h) { cb(null); return; }
+                    var sc = Math.min(1, maxSide / Math.max(w, h));
+                    w = Math.max(1, Math.round(w * sc)); h = Math.max(1, Math.round(h * sc));
+                    var cv = document.createElement('canvas');
+                    cv.width = w; cv.height = h;
+                    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+                    var out = cv.toDataURL('image/jpeg', quality);
+                    cb(out && out.length > 100 ? out : null);
+                } catch (e) { cb(null); }
+            };
+            img.onerror = function () { cb(null); };
+            img.src = dataUrl;
+        } catch (e) { cb(null); }
+    }
+
+    function eachAsync(list, i, fn, end) {
+        if (!list || i >= list.length) { end(); return; }
+        fn(list[i], function (next) { eachAsync(list, i + 1, fn, end); }, i);
+    }
+
+    function check() {
+        if (done) return;
+        var fd = window.featureData;
+        if (!fd) return;
+        done = true;
+        var freed = 0, changed = false;
+        try {
+            // 1) 头像库：裁剪数量
+            var lib = fd.avatarLib || (fd.avatarLib = { mine: [], partner: [] });
+            ['mine', 'partner'].forEach(function (k) {
+                if (Array.isArray(lib[k]) && lib[k].length > MAX_PER_LIB) {
+                    freed += sq(lib[k].slice(0, lib[k].length - MAX_PER_LIB));
+                    lib[k] = lib[k].slice(-MAX_PER_LIB);
+                    changed = true;
+                }
+            });
+            // 2) 头像：逐个重压超大项
+            var tasks = [];
+            ['mine', 'partner'].forEach(function (k) {
+                (lib[k] || []).forEach(function (v, idx) {
+                    if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > MAX_AVATAR_BYTES) tasks.push({ k: k, i: idx });
+                });
+            });
+            eachAsync(tasks, 0, function (t, next) {
+                var cur = lib[t.k][t.i];
+                recompress(cur, 256, 0.85, function (out) {
+                    if (out && out.length < cur.length) { freed += cur.length - out.length; lib[t.k][t.i] = out; changed = true; }
+                    next();
+                });
+            }, function () {
+                // 3) 背景：重压超大项
+                var bgs = [['homePageBg'], ['togetherBg'], ['loveDiary', 'bg'], ['companyDiary', 'bg']];
+                var bt = [];
+                bgs.forEach(function (path) {
+                    var o = fd;
+                    for (var i = 0; i < path.length - 1; i++) { o = o && o[path[i]]; }
+                    var key = path[path.length - 1];
+                    var b = o && o[key];
+                    if (b && typeof b.image === 'string' && b.image.length > MAX_BG_BYTES) bt.push({ owner: o, key: key, img: b.image });
+                });
+                eachAsync(bt, 0, function (t, next) {
+                    recompress(t.img, 1600, 0.8, function (out) {
+                        if (out && out.length < t.img.length) {
+                            freed += t.img.length - out.length;
+                            t.owner[t.key] = Object.assign({}, t.owner[t.key], { image: out });
+                            changed = true;
+                        }
+                        next();
+                    });
+                }, function () {
+                    // 存储体检报告：让你能看到实际占用（用于判断是否接近 5MB 配额）
+                    try {
+                        var __mb = (JSON.stringify(window.featureData || {}).length / 1048576);
+                        if (window.localStorage) { __mb += (String(window.localStorage.getItem("CHAT_APP_V13_appData") || "").length / 1048576); }
+                        notify("数据占用约 " + __mb.toFixed(2) + " MB" + (__mb > 4 ? "（接近上限，图片会存不住）" : ""), __mb > 4 ? "warning" : "info");
+                    } catch (e) {}
+                    if (changed) {
+                        try { if (typeof saveData === 'function') saveData(); } catch (e) {}
+                        if (freed > 300 * 1024) notify('已优化图片占用，释放约 ' + Math.round(freed / 1024) + ' KB', 'success');
+                    }
+                });
+            });
+        } catch (e) {}
+    }
+
+    window.initStorageSlim = check;
+    window.storageSlimRun = check;
+    try { setTimeout(check, 3500); } catch (e) {}
+})();})();
 /* ===== 功能模块：hwset（独立作用域） ===== */
 
 (function () {
