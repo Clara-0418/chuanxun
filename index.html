@@ -12342,13 +12342,17 @@ if (img) { viewImage(img.dataset.src); return; }
                 const m = entry.match(/^(\S{1,3})\s+(.*)$/);
                 st.partner.emoji = m ? m[1] : '💗';
                 st.partner.text = m ? (m[2] || entry) : entry;
-                var pw = getRandomItem(WEATHER_PRESETS) || { emoji: '☀️', text: '晴' };   // 梦角天气：文案 + 随机温度
+    // 立即刷新聊天页顶部状态胶囊（保证不因后续异常漏更新）
+    try { var _chip = document.getElementById('partnerStatus'); if (_chip) { var _sp = _chip.querySelector('span'); if (_sp) _sp.textContent = st.partner.emoji + ' ' + st.partner.text; } } catch (e) {}
+                try {
+    var pw = getRandomItem(WEATHER_PRESETS) || { emoji: '☀️', text: '晴' };   // 梦角天气：文案 + 随机温度
                 var lo = 12, hi = 30;
                 if (/雪/.test(pw.text)) { lo = -6; hi = 4; }
                 else if (/雨|雷/.test(pw.text)) { lo = 8; hi = 22; }
                 else if (/晴/.test(pw.text)) { lo = 18; hi = 34; }
                 else if (/雾|阴/.test(pw.text)) { lo = 6; hi = 20; }
                 st.partner.weather = { emoji: pw.emoji, text: pw.text + ' ' + getRandomInt(lo, hi) + '°' };
+    } catch (e) { st.partner.weather = st.partner.weather || { emoji: '☀️', text: '晴 22°' }; }
                 st.partner.mood = getRandomItem(MOOD_PRESETS) || { emoji: '😊', text: '开心' };
                 st.partner.updatedAt = Date.now();
                 saveData();
