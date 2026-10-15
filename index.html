@@ -6174,6 +6174,10 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .hm2-dock-item { padding: 8px 2px !important; }
         .hm2-dock-item span, .hm2-dock-item .hm2-dock-label { font-size: 11px !important; line-height: 1.25 !important; }
 
+        /* ===== 主页底部发黑修正：无自定义背景时用主题底色 ===== */
+        #homePage.active { background-color: var(--primary-bg) !important; }
+        body.lov-home-bg-full #homePage.active { background-color: transparent !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -7603,7 +7607,40 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         // 两份都带时间戳时取较新的；老数据没有 savedAt 时以主存储为准，避免被陈旧镜像覆盖
                         data = mirror;
                     }
-                    try {
+                    // ===== 关键：图片类字段合并 =====
+                // 配额不足时会写入"轻量镜像"（不含图片）。它可能比主存储新，
+                // 如果直接采用就会把头像/背景图覆盖成空 —— 这里逐字段取"有图的一侧"。
+                try {
+                    if (primary && data === mirror) {
+                        if (!data.featureData) data.featureData = {};
+                        var _pf = primary.featureData || {};
+                        var _df = data.featureData;
+                        var _ak = ['homePageBg', 'togetherBg'];
+                        for (var _i = 0; _i < _ak.length; _i++) {
+                            var _k = _ak[_i], _m = _df[_k] || {}, _pv = _pf[_k] || {};
+                            if (!_m.image && _pv.image) _df[_k] = Object.assign({}, _pv, _m, { image: _pv.image });
+                        }
+                        var _ma = _df.avatarLib || {}, _pa = _pf.avatarLib || {};
+                        _df.avatarLib = Object.assign({}, _pa, _ma, {
+                            mine: (_ma.mine && _ma.mine.length) ? _ma.mine : (_pa.mine || []),
+                            partner: (_ma.partner && _ma.partner.length) ? _ma.partner : (_pa.partner || [])
+                        });
+                        if (_pf.loveDiary && _df.loveDiary) {
+                            var _mb = _df.loveDiary.bg || {}, _pb = _pf.loveDiary.bg || {};
+                            if (!_mb.image && _pb.image) _df.loveDiary.bg = Object.assign({}, _pb, _mb, { image: _pb.image });
+                        }
+                        if (_pf.companyDiary && _df.companyDiary) {
+                            var _cb = _df.companyDiary.bg || {}, _cpb = _pf.companyDiary.bg || {};
+                            if (!_cb.image && _cpb.image) _df.companyDiary.bg = Object.assign({}, _cpb, _cb, { image: _cpb.image });
+                        }
+                        var _mp = _df.profile || {}, _pp = _pf.profile || {};
+                        if (!_mp.avatar && _pp.avatar) _mp.avatar = _pp.avatar;
+                        if (!_mp.cover && _pp.cover) _mp.cover = _pp.cover;
+                        if (data.settings && primary.settings && !data.settings.chatBgImage && primary.settings.chatBgImage) {
+                            data.settings.chatBgImage = primary.settings.chatBgImage;
+                        }
+                    }
+                } catch (e) {}                try {
                     if (data) {
                         // 逐字段做类型守卫：任一字段类型异常不会中断整个启动流程
                         if (Array.isArray(data.messages)) messages = data.messages.map(m => ({ ...m, timestamp: m
