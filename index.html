@@ -4796,6 +4796,355 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：moment2 ===== */
+/* ===== 朋友圈重做 moment2（全部选择器带 mm2 前缀，主题变量取色，深色模式可用） ===== */
+#mm2Root {
+    position: fixed;
+    inset: 0;
+    z-index: 9600;
+    display: none;
+    flex-direction: column;
+    background: var(--primary-bg, #f9f9f9);
+    color: var(--text-primary, #1a1a1a);
+    font-family: var(--font-family, inherit);
+    overflow: hidden;
+    --mm2-fab: #22c55e;
+    --mm2-avatar-radius: 8px;
+}
+#mm2Root.mm2-on { display: flex; }
+#mm2Root .mm2-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: block;
+}
+#mm2Root .mm2-pane[hidden] { display: none !important; }
+#mm2Root .mm2-pane { display: block; }
+#mm2Root .mm2-feed-pane { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+#mm2Root img { display: block; max-width: 100%; }
+#mm2Root button {
+    font-family: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+#mm2Root .mm2-ico { font-style: normal; line-height: 1; }
+
+/* ---- 顶部封面 ---- */
+#mm2Root .mm2-cover {
+    position: relative;
+    width: 100%;
+    height: 22vh;
+    min-height: 150px;
+    max-height: 320px;
+    background: linear-gradient(135deg, var(--accent-color, #c5a47e), var(--secondary-bg, #ffffff));
+    background-size: cover;
+    background-position: center;
+}
+#mm2Root .mm2-cover-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 8px;
+}
+#mm2Root .mm2-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.32);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1;
+}
+#mm2Root .mm2-pill:active { opacity: 0.72; }
+#mm2Root .mm2-cover-acts { display: flex; align-items: center; gap: 8px; }
+#mm2Root .mm2-icon-btn {
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.32);
+    color: #fff;
+    font-size: 15px;
+}
+#mm2Root .mm2-icon-btn:active { opacity: 0.72; }
+#mm2Root .mm2-cover-who {
+    position: absolute;
+    right: 12px;
+    bottom: 0;
+    transform: translateY(38%);
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    max-width: calc(100% - 24px);
+}
+#mm2Root .mm2-cover-nick {
+    padding-bottom: 6px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+    max-width: 52vw;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+#mm2Root .mm2-big-avatar {
+    flex: 0 0 auto;
+    width: 76px; height: 76px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 3px solid var(--secondary-bg, #ffffff);
+    background: var(--secondary-bg, #ffffff);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary, #7a7a7a);
+    font-size: 26px;
+}
+#mm2Root .mm2-big-avatar img { width: 100%; height: 100%; object-fit: cover; }
+#mm2Root .mm2-cover-sig {
+    padding: 52px 16px 4px;
+    text-align: right;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary, #7a7a7a);
+    word-break: break-word;
+}
+
+/* ---- 帖子列表 ---- */
+#mm2Root .mm2-feed { padding: 6px 0 4px; }
+#mm2Root .mm2-post {
+    display: flex;
+    gap: 10px;
+    padding: 14px 14px 16px;
+    border-bottom: 1px solid var(--border-color, #ebebeb);
+    background: var(--secondary-bg, #ffffff);
+}
+#mm2Root .mm2-avatar {
+    flex: 0 0 auto;
+    width: 44px; height: 44px;
+    border-radius: var(--mm2-avatar-radius);
+    overflow: hidden;
+    background: var(--message-received-bg, #f0f0f0);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary, #7a7a7a);
+    font-size: 17px;
+}
+#mm2Root .mm2-avatar img { width: 100%; height: 100%; object-fit: cover; }
+#mm2Root .mm2-post-body { flex: 1 1 auto; min-width: 0; }
+#mm2Root .mm2-post-name {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 15px; font-weight: 700;
+}
+#mm2Root .mm2-post-name span:first-child {
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 62%;
+}
+#mm2Root .mm2-post-time {
+    font-size: 11.5px; font-weight: 400;
+    color: var(--text-secondary, #7a7a7a);
+    white-space: nowrap;
+}
+#mm2Root .mm2-post-text {
+    margin-top: 5px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--text-primary, #1a1a1a);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+#mm2Root .mm2-post-imgs {
+    margin-top: 8px;
+    display: grid;
+    gap: 4px;
+}
+#mm2Root .mm2-post-imgs.mm2-grid-1 { grid-template-columns: 1fr; max-width: 72%; }
+#mm2Root .mm2-post-imgs.mm2-grid-2 { grid-template-columns: repeat(2, 1fr); max-width: 72%; }
+#mm2Root .mm2-post-imgs.mm2-grid-3 { grid-template-columns: repeat(3, 1fr); }
+#mm2Root .mm2-post-imgs img {
+    width: 100%;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--message-received-bg, #f0f0f0);
+    cursor: zoom-in;
+}
+#mm2Root .mm2-grid-1 img { max-height: 240px; object-fit: contain; }
+#mm2Root .mm2-grid-2 img, #mm2Root .mm2-grid-3 img { aspect-ratio: 1 / 1; }
+
+/* ---- 操作行（右对齐，灰色） ---- */
+#mm2Root .mm2-post-acts {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+}
+#mm2Root .mm2-act {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    color: var(--text-secondary, #7a7a7a);
+}
+#mm2Root .mm2-act .mm2-ico { font-size: 13px; }
+#mm2Root .mm2-act:active { background: var(--message-received-bg, #f0f0f0); }
+#mm2Root .mm2-act.mm2-act-liked { color: var(--accent-color, #c5a47e); }
+
+/* ---- 评论区 ---- */
+#mm2Root .mm2-interact {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--message-received-bg, #f0f0f0);
+}
+#mm2Root .mm2-likes {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--accent-color, #c5a47e);
+}
+#mm2Root .mm2-likes span { color: var(--text-primary, #1a1a1a); word-break: break-word; }
+#mm2Root .mm2-likes + .mm2-cmts {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px solid var(--border-color, #ebebeb);
+}
+#mm2Root .mm2-cmt {
+    position: relative;
+    padding: 2px 22px 2px 0;
+    font-size: 13px;
+    line-height: 1.55;
+    word-break: break-word;
+}
+#mm2Root .mm2-cmt.mm2-cmt-reply { padding-left: 12px; }
+#mm2Root .mm2-cmt-name { color: var(--accent-color, #c5a47e); font-weight: 600; }
+#mm2Root .mm2-cmt-body { color: var(--text-primary, #1a1a1a); }
+#mm2Root .mm2-cmt-del {
+    position: absolute; right: 0; top: 2px;
+    font-size: 12px;
+    color: var(--text-secondary, #7a7a7a);
+    padding: 2px 4px;
+}
+
+/* ---- 评论输入 ---- */
+#mm2Root .mm2-cmt-input {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#mm2Root .mm2-cmt-input input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--message-received-bg, #f0f0f0);
+    color: var(--text-primary, #1a1a1a);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+}
+#mm2Root .mm2-cmt-input input::placeholder { color: var(--text-secondary, #7a7a7a); }
+#mm2Root .mm2-cmt-send {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--message-sent-text, #ffffff);
+    background: var(--accent-color, #c5a47e);
+}
+#mm2Root .mm2-cmt-del-post {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--text-secondary, #7a7a7a);
+}
+#mm2Root .mm2-empty {
+    padding: 60px 24px;
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--text-secondary, #7a7a7a);
+}
+
+/* ---- 发布浮动按钮 ---- */
+#mm2Root .mm2-fab {
+    position: absolute;
+    right: 18px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 300;
+    color: #fff;
+    background: var(--mm2-fab);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    z-index: 3;
+}
+#mm2Root .mm2-fab:active { transform: scale(0.94); }
+
+/* ---- 访客记录页 ---- */
+#mm2Root .mm2-visit-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+    background: var(--secondary-bg, #ffffff);
+    border-bottom: 1px solid var(--border-color, #ebebeb);
+}
+#mm2Root .mm2-visit-back {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 15px;
+    min-width: 62px;
+    color: var(--text-primary, #1a1a1a);
+}
+#mm2Root .mm2-visit-title { font-size: 16px; font-weight: 700; }
+#mm2Root .mm2-visit-clear {
+    min-width: 62px;
+    text-align: right;
+    font-size: 14px;
+    color: var(--mm2-clear-color, #f4636f);
+}
+#mm2Root .mm2-visit-clear:active { opacity: 0.6; }
+#mm2Root .mm2-vgroup-head {
+    padding: 6px 14px;
+    background: var(--message-received-bg, #f0f0f0);
+    color: var(--text-secondary, #7a7a7a);
+    font-size: 12.5px;
+}
+#mm2Root .mm2-vrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--secondary-bg, #ffffff);
+    border-bottom: 1px solid var(--border-color, #ebebeb);
+}
+#mm2Root .mm2-vname { flex: 1 1 auto; font-size: 14.5px; font-weight: 700; }
+#mm2Root .mm2-vtime { font-size: 12.5px; color: var(--text-secondary, #7a7a7a); }
+html[data-theme="dark"] #mm2Root { --mm2-fab: #34d17a; --mm2-clear-color: #ff7b85; }
+/* 首次渲染前先藏住旧朋友圈界面，避免新旧同时闪一下（只隐藏，不删除任何节点） */
+#momentModal.mm2-legacy-hidden { display: none !important; }
+
 /* ===== 功能模块：hwset ===== */
         /* ===== 主页底部「返回聊天」与左上角返回键重复：隐藏（节点保留，程序仍可 .click()） ===== */
         #homeBackBtn { display: none !important; }
@@ -10186,8 +10535,9 @@ if (img) { viewImage(img.dataset.src); return; }
                 }, freq * 60 * 1000);
             }
 
-            function openMoments() { renderMoments();
-                showModal(document.getElementById('momentModal')); }
+function openMoments() { renderMoments();
+showModal(document.getElementById('momentModal'));
+try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
 
             function saveMomentSettings() {
                 const freq = numOr(document.getElementById('momentFreq').value, 5);
@@ -11916,6 +12266,7 @@ if (img) { viewImage(img.dataset.src); return; }
 
                 document.getElementById('momentCloseBtn').addEventListener('click', () => hideModal(document
                     .getElementById('momentModal')));
+                try { if (window.mm2Hide) window.mm2Hide(); } catch (e) {}
                 document.getElementById('momentPublishBtn').addEventListener('click', () => { document
                         .getElementById('momentPublishText').value = '';
                     document.getElementById('momentPublishImages').innerHTML = '';
@@ -12218,7 +12569,7 @@ if (img) { viewImage(img.dataset.src); return; }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -12872,6 +13223,813 @@ if (img) { viewImage(img.dataset.src); return; }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：moment2（独立作用域） ===== */
+(function(){
+
+(function () {
+    'use strict';
+
+    var ROOT_ID = 'mm2Root';
+    var VERSION = 'moment2-1';
+
+    /* 回复目标：主程序的 submitComment 读的是它自己作用域内的 momentReplyTarget，
+       这里用 window 上的同名量做镜像，两边读写同一个对象，零逻辑改动。 */
+    window.momentReplyTarget = window.momentReplyTarget || null;
+
+    var mm2Ready = false;
+    var mm2View = 'feed';
+    var mm2VisitsRendered = false;
+    var mm2Submitting = false;
+    var mm2Picking = false;
+    var mm2RawShow = false;
+    var mm2Rendering = false;
+    var mm2PendingReply = null;
+    var mm2Orig = null;
+
+    function W() { return typeof window !== 'undefined' ? window : null; }
+    function D() { return (W() && W().document) || null; }
+    function $(id) { var d = D(); return d ? d.getElementById(id) : null; }
+    function mEl(tag, cls) { var d = D(); if (!d) return null; var e = d.createElement(tag); if (cls) e.className = cls; return e; }
+    function num(v, dv) { var n = parseInt(v, 10); return (typeof n === 'number' && isFinite(n)) ? n : dv; }
+
+    function mm2Esc(v) {
+        try { if (typeof W().escapeHtml === 'function') return W().escapeHtml(String(v == null ? '' : v)); } catch (e) {}
+        return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+        });
+    }
+
+    function mm2Notify(msg, type, dur) {
+        try {
+            if (typeof W().showNotification === 'function') { W().showNotification(msg, type || 'info', dur || 2000); return; }
+        } catch (e) {}
+    }
+
+    /* ===== 数据：全部读写主程序当前生效的 featureData，并复用主程序 saveData 落盘 ===== */
+    function mm2FD() {
+        var w = W();
+        if (!w) return null;
+        try { if (typeof w.featureDebug === 'function') { var a = w.featureDebug(); if (a && typeof a === 'object') return a; } } catch (e) {}
+        try { if (w.featureData && typeof w.featureData === 'object') return w.featureData; } catch (e) {}
+        try { if (typeof featureData !== 'undefined' && featureData && typeof featureData === 'object') return featureData; } catch (e) {} /* eslint-disable-line no-undef */
+        return null;
+    }
+    function mm2Store() {
+        var fd = mm2FD();
+        if (!fd) return { visits: [] };
+        if (!fd.moment2 || typeof fd.moment2 !== 'object') fd.moment2 = {};
+        if (!Array.isArray(fd.moment2.visits)) fd.moment2.visits = [];
+        return fd.moment2;
+    }
+    function mm2Visits() { return mm2Store().visits; }
+    function mm2Save() {
+        try { if (typeof W().saveData === 'function') { W().saveData(); return; } } catch (e) {}
+        try { if (typeof saveData === 'function') saveData(); } catch (e) {} /* eslint-disable-line no-undef */
+    }
+
+    /* ===== 读取主程序数据 / 名称 / 头像（只读） ===== */
+    function mm2Posts() {
+        var arr = null;
+        try { arr = W().momentPosts; } catch (e) {}
+        try { if (!Array.isArray(arr) && typeof momentPosts !== 'undefined' && Array.isArray(momentPosts)) arr = momentPosts; } catch (e) {} /* eslint-disable-line no-undef */
+        return Array.isArray(arr) ? arr.slice() : [];
+    }
+    function mm2Settings() { try { return W().settings || {}; } catch (e) { return {}; } }
+    function mm2UserName(uid) {
+        if (uid === 'me' || uid === 'self') return mm2Settings().myName || '我';
+        if (uid === 'partner') return mm2Settings().partnerName || 'TA';
+        return String(uid || '');
+    }
+    function mm2Avatar(uid) {
+        var fd = mm2FD() || {};
+        var prof = fd.profile || {};
+        var lib = fd.avatarLib || {};
+        var src = '';
+        if (uid === 'me' || uid === 'self') {
+            src = lib.currentMine || '';
+            if (!src) { try { src = (typeof W().getUserAvatar === 'function' && W().getUserAvatar('me')) || ''; } catch (e) {} }
+            if (!src) src = prof.avatar || '';
+        } else {
+            var isPartner = (uid === 'partner' || uid === 'hm2' || uid === 'myRole' || !uid);
+            if (isPartner) {
+                src = lib.currentPartner || '';
+                if (!src) { try { src = (typeof W().getUserAvatar === 'function' && W().getUserAvatar('partner')) || ''; } catch (e) {} }
+            } else {
+                try { src = (typeof W().getUserAvatar === 'function' && W().getUserAvatar(uid)) || ''; } catch (e) {}
+            }
+        }
+        return src || '';
+    }
+    function mm2Time(ts) {
+        try { if (typeof W().formatMomentTime === 'function') return W().formatMomentTime(ts); } catch (e) {}
+        try {
+            var d = new Date(ts), diff = Date.now() - ts;
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+            return (d.getMonth() + 1) + '月' + d.getDate() + '日';
+        } catch (e2) { return ''; }
+    }
+
+    /* ===== 渲染小工具 ===== */
+    function mm2AvatarHtml(uid, cls) {
+        var src = mm2Avatar(uid);
+        var inner = src ? '<img src="' + mm2Esc(src) + '" alt="">' : '<span class="mm2-ico">&#9825;</span>';
+        return '<div class="' + cls + '">' + inner + '</div>';
+    }
+
+    function mm2CoverHtml() {
+        var fd = mm2FD() || {};
+        var prof = fd.profile || {};
+        var cover = prof.cover || '';
+        var nick = mm2Settings().myName || '我';
+        var sig = prof.signature || '';
+        var style = cover ? ' style="background-image:url(\'' + mm2Esc(cover).replace(/'/g, '%27') + '\')"' : '';
+        return '<div class="mm2-cover" id="mm2Cover"' + style + '>' +
+            '<div class="mm2-cover-bar">' +
+                '<button class="mm2-pill" id="mm2Back" type="button">← 返回</button>' +
+                '<div class="mm2-cover-acts">' +
+                    '<button class="mm2-icon-btn" id="mm2Edit" type="button" title="编辑资料"><span class="mm2-ico">&#9998;</span></button>' +
+                    '<button class="mm2-icon-btn" id="mm2Visit" type="button" title="个人主页 / 访客记录"><span class="mm2-ico">&#9787;</span></button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="mm2-cover-who">' +
+                '<div class="mm2-cover-nick">' + mm2Esc(nick) + '</div>' +
+                mm2AvatarHtml('me', 'mm2-big-avatar') +
+            '</div>' +
+        '</div>' +
+        '<div class="mm2-cover-sig" id="mm2Signature">' + mm2Esc(sig) + '</div>';
+    }
+
+    function mm2PostHtml(post) {
+        var uid = post.userId || 'partner';
+        var isMe = (uid === 'me' || uid === 'self');
+        var liked = !!(post.likes && post.likes.indexOf('me') > -1);
+        var likes = post.likes || [];
+        var comments = post.comments || [];
+        var allowComment = mm2Settings().momentAllowComment !== false;
+        var text = post.text || '';
+        var images = post.images || [];
+        var h = '';
+
+        h += '<div class="mm2-post" data-mm2-id="' + mm2Esc(post.id) + '" data-uid="' + mm2Esc(uid) + '">';
+        h += mm2AvatarHtml(isMe ? 'me' : uid, 'mm2-avatar');
+        h += '<div class="mm2-post-body">';
+        h += '<div class="mm2-post-name"><span>' + mm2Esc(mm2UserName(isMe ? 'me' : uid)) + '</span>' +
+             '<span class="mm2-post-time">' + mm2Esc(mm2Time(post.timestamp)) + '</span></div>';
+        if (text) h += '<div class="mm2-post-text">' + mm2Esc(text) + '</div>';
+        if (images.length) {
+            var cols = images.length === 1 ? 1 : (images.length <= 4 ? 2 : 3);
+            h += '<div class="mm2-post-imgs mm2-grid-' + cols + '">' + images.map(function (src) {
+                return '<img src="' + mm2Esc(src) + '" data-mm2-src="' + mm2Esc(src) + '" loading="lazy" decoding="async" alt="">';
+            }).join('') + '</div>';
+        }
+        h += '<div class="mm2-post-acts">' +
+                '<button class="mm2-act' + (liked ? ' mm2-act-liked' : '') + '" type="button" data-mm2-like="1" title="赞">' +
+                    '<span class="mm2-ico">' + (liked ? '&#9829;' : '&#9825;') + '</span>' +
+                    '<span class="mm2-act-label">' + (liked ? '取消' : '赞') + '</span></button>' +
+                (allowComment ? '<button class="mm2-act" type="button" data-mm2-comment="1" title="评论">' +
+                    '<span class="mm2-ico">&#9993;</span><span class="mm2-act-label">评论</span></button>' : '') +
+                '<button class="mm2-act" type="button" data-mm2-collect="1" title="收藏分享">' +
+                    '<span class="mm2-ico">&#9734;</span><span class="mm2-act-label">收藏</span></button>' +
+             '</div>';
+        if (likes.length || comments.length) {
+            h += '<div class="mm2-interact">';
+            if (likes.length) {
+                h += '<div class="mm2-likes"><span class="mm2-ico">&#9829;</span><span>' +
+                     mm2Esc(likes.map(function (id) { return mm2UserName(id); }).join('，')) + '</span></div>';
+            }
+            if (comments.length) {
+                h += '<div class="mm2-cmts">' + comments.map(function (c) {
+                    var cUid = c.userId || '';
+                    var uidLow = String(cUid).toLowerCase();
+                    var isMyCmt = (uidLow === 'me' || uidLow === 'self');
+                    var cName = mm2UserName(cUid);
+                    var rt = c.replyTo;
+                    var rtLow = String(rt == null ? '' : rt).toLowerCase();
+                    var hasReply = (rt !== null && rt !== undefined && rt !== '' && rtLow !== 'null' && rtLow !== 'undefined');
+                    var head = cName + (hasReply ? ' 回复 ' + mm2UserName(rt) : '');
+                    var del = isMyCmt ? '<button class="mm2-cmt-del" type="button" data-mm2-del-cmt="' +
+                        mm2Esc(c.id) + '" title="删除">×</button>' : '';
+                    return '<div class="mm2-cmt' + (hasReply ? ' mm2-cmt-reply' : '') + '" data-mm2-cuser="' +
+                        mm2Esc(cUid) + '" data-mm2-creply="' + mm2Esc(hasReply ? rt : '') + '" data-mm2-cid="' +
+                        mm2Esc(c.id) + '">' +
+                        '<span class="mm2-cmt-name">' + mm2Esc(head) + '</span>：' +
+                        '<span class="mm2-cmt-body">' + mm2Esc(c.text || '') + '</span>' + del + '</div>';
+                }).join('') + '</div>';
+            }
+            h += '</div>';
+        }
+        if (allowComment) {
+            h += '<div class="mm2-cmt-input" data-mm2-post="' + mm2Esc(post.id) + '">' +
+                    '<input type="text" class="mm2-cmt-field" placeholder="评论" autocomplete="off">' +
+                    '<button class="mm2-cmt-send" type="button" data-mm2-send="1">发送</button>' +
+                 '</div>';
+        }
+        if (isMe) {
+            h += '<button class="mm2-cmt-del-post" type="button" data-mm2-del-post="' + mm2Esc(post.id) + '">删除这条动态</button>';
+        }
+        h += '</div></div>';
+        return h;
+    }
+
+    function mm2RenderCover() {
+        var box = $('mm2CoverBox');
+        if (box) box.innerHTML = mm2CoverHtml();
+    }
+
+    function mm2RenderFeed() {
+        var feed = $('mm2Feed');
+        if (!feed) return false;
+        /* 点击统一由 #mm2Root 委托，这里不重复绑定 */
+        var posts = mm2Posts().sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+        if (!posts.length) {
+            feed.innerHTML = '<div class="mm2-empty">还没有动态，点右下角的加号发布第一条</div>';
+        } else {
+            feed.innerHTML = posts.map(mm2PostHtml).join('');
+        }
+        return true;
+    }
+
+    function mm2RenderFab() {
+        var box = $('mm2FabBox');
+        if (!box) return;
+        if (!box.dataset.mm2Fab) {
+            box.dataset.mm2Fab = '1';
+            box.innerHTML = '<button class="mm2-fab" id="mm2Fab" type="button" title="发布动态">＋</button>';
+        }
+    }
+
+    /* ===== 交互：全部转发到主程序现有入口，找不到原入口就点原按钮兜底 ===== */
+    function mm2ReplyTo(cmt, field) {
+        if (!cmt) return;
+        var uid = cmt.dataset.mm2Cuser || '';
+        var name = (cmt.querySelector('.mm2-cmt-name') || {}).textContent || '';
+        name = String(name).replace(/\s*回复\s*.*$/, '').trim();
+        window.momentReplyTarget = { postId: mm2PostIdOf(cmt), userId: uid };
+        if (field) {
+            field.placeholder = '回复 ' + (name || mm2UserName(uid));
+            try { field.focus(); } catch (e) {}
+        }
+    }
+
+    function mm2PostIdOf(node) {
+        var p = node && node.closest ? node.closest('.mm2-post') : null;
+        return p ? (p.dataset.mm2Id || '') : '';
+    }
+
+    function mm2FindField(postId) {
+        var feed = $('mm2Feed');
+        if (!feed) return null;
+        var wrap = feed.querySelector('.mm2-cmt-input[data-mm2-post="' + postId + '"]');
+        return wrap ? wrap.querySelector('.mm2-cmt-field') : null;
+    }
+
+    function mm2OnClick(e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+
+        var img = t.closest('#mm2Feed img[data-mm2-src]');
+        if (img) { mm2ViewImage(img.getAttribute('data-mm2-src')); return; }
+
+        var delCmt = t.closest('[data-mm2-del-cmt]');
+        var delPost = t.closest('[data-mm2-del-post]');
+        var likeBtn = t.closest('[data-mm2-like]');
+        var cmtBtn = t.closest('[data-mm2-comment]');
+        var collectBtn = t.closest('[data-mm2-collect]');
+        var sendBtn = t.closest('[data-mm2-send]');
+        var cmt = t.closest('.mm2-cmt');
+        var post = t.closest('.mm2-post');
+        var postId = post ? (post.dataset.mm2Id || '') : '';
+
+        if (t.closest('#mm2Fab')) { mm2Publish(); return; }
+        if (t.closest('#mm2Back')) { mm2Back(); return; }
+        if (t.closest('#mm2Edit')) { mm2EditProfile(); return; }
+        if (t.closest('#mm2Visit')) { mm2OpenVisits(); return; }
+        if (t.closest('#mm2VisitBack')) { mm2Show(true); return; }
+        if (t.closest('#mm2VisitClear')) { mm2ClearVisits(); return; }
+
+        if (delPost) {
+            e.stopPropagation();
+            mm2DeletePost(delPost.getAttribute('data-mm2-del-post') || postId);
+            return;
+        }
+        if (delCmt) {
+            e.stopPropagation();
+            mm2DeleteComment(postId, delCmt.getAttribute('data-mm2-del-cmt'));
+            return;
+        }
+        if (likeBtn) { mm2ToggleLike(postId); return; }
+        if (collectBtn) { mm2Notify('收藏功能在主程序里维护，这里仅作展示', 'info', 2000); return; }
+        if (cmtBtn) {
+            var field0 = mm2FindField(postId);
+            if (field0) {
+                window.momentReplyTarget = null;
+                field0.placeholder = '评论';
+                try { field0.focus(); field0.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e2) {}
+            }
+            return;
+        }
+        if (sendBtn) { mm2Submit(sendBtn); return; }
+        if (cmt) { mm2ReplyTo(cmt, mm2FindField(postId)); return; }
+    }
+
+    function mm2ViewImage(src) {
+        if (!src) return;
+        try { if (typeof W().viewImage === 'function') { W().viewImage(src); return; } } catch (e) {}
+        var d = D(); /* 兜底：点一下原朋友圈里同源的图片，让原程序的图片查看逻辑接管 */
+        if (!d) return;
+        var imgs = d.querySelectorAll('#momentList img');
+        for (var i = 0; i < imgs.length; i++) {
+            if (imgs[i].getAttribute('data-src') === src) { try { imgs[i].click(); } catch (e2) {} return; }
+        }
+    }
+
+    function mm2ToggleLike(postId) {
+        if (!postId) return;
+        try { if (typeof W().toggleLike === 'function') { W().toggleLike(postId); mm2Refresh(); return; } } catch (e) {}
+        var posts = W().momentPosts;
+        if (!Array.isArray(posts)) return;
+        var post = null;
+        for (var i = 0; i < posts.length; i++) { if (posts[i] && posts[i].id === postId) { post = posts[i]; break; } }
+        if (!post) return;
+        if (!Array.isArray(post.likes)) post.likes = [];
+        var idx = post.likes.indexOf('me');
+        if (idx > -1) post.likes.splice(idx, 1);
+        else { post.likes.push('me'); post.likeAt = post.likeAt || {}; post.likeAt.me = Date.now(); }
+        mm2Save();
+        mm2Refresh();
+    }
+
+    function mm2DeleteComment(postId, commentId) {
+        if (!postId || !commentId) return;
+        try { if (typeof W().deleteComment === 'function') { W().deleteComment(postId, commentId); mm2Refresh(); return; } } catch (e) {}
+        var posts = W().momentPosts;
+        if (!Array.isArray(posts)) return;
+        for (var i = 0; i < posts.length; i++) {
+            if (posts[i] && posts[i].id === postId && Array.isArray(posts[i].comments)) {
+                posts[i].comments = posts[i].comments.filter(function (c) { return c.id !== commentId; });
+                break;
+            }
+        }
+        mm2Save();
+        mm2Refresh();
+    }
+
+    function mm2DeletePost(postId) {
+        if (!postId) return;
+        var go = function () {
+            try { if (typeof W().deleteMoment === 'function') { W().deleteMoment(postId); mm2Refresh(); return; } } catch (e) {}
+            var posts = W().momentPosts;
+            if (!Array.isArray(posts)) return;
+            var next = posts.filter(function (p) { return !p || p.id !== postId; });
+            try { posts.length = 0; next.forEach(function (p) { posts.push(p); }); } catch (e2) {}
+            mm2Save();
+            mm2Refresh();
+        };
+        if (typeof W().iosConfirm === 'function') {
+            var p = null;
+            try { p = W().iosConfirm('删除这条动态？', { okText: '删除', destructive: true }); } catch (e3) { p = null; }
+            if (p && typeof p.then === 'function') { p.then(function (ok) { if (ok) go(); }); return; }
+        }
+        go();
+    }
+
+    function mm2ShimContainer(postId, text) {
+        var d = D();
+        if (!d) return null;
+        /* 关键：先清掉主程序作用域里残留的回复目标（同名全局变量），
+           再把本模块算好的目标写回去，保证主程序读到的是这一次点击的回复对象；
+           主程序处理完会自己把它置回 null。 */
+        window.momentReplyTarget = null;
+        window.momentReplyTarget = mm2PendingReply;
+        var wrap = d.createElement('div');
+        wrap.className = 'moment-comment-input';
+        wrap.setAttribute('data-post', postId);
+        var input = d.createElement('input');
+        input.className = 'moment-comment-field';
+        input.value = text;
+        wrap.appendChild(input);
+        return wrap;
+    }
+
+    function mm2Submit(btn) {
+        if (mm2Submitting) return;
+        var sendBtn = btn || null;
+        var wrap = sendBtn && sendBtn.closest ? sendBtn.closest('.mm2-cmt-input') : null;
+        if (!wrap) return;
+        var field = wrap.querySelector('.mm2-cmt-field');
+        var postId = wrap.getAttribute('data-mm2-post') || '';
+        var text = field ? String(field.value || '').trim() : '';
+        if (!text) return;
+        var rt = window.momentReplyTarget;
+        var replyTo = (rt && rt.postId === postId && rt.userId && rt.userId !== 'me' && rt.userId !== 'self') ? rt.userId : null;
+        var orig = mm2Orig && mm2Orig.submitComment;
+        /* 交给主程序 submitComment 的目标：只保留本次要回复的人（主程序据此写 replyTo） */
+        mm2PendingReply = replyTo ? { postId: postId, userId: replyTo } : null;
+        mm2Submitting = true;
+        try {
+            if (typeof orig === 'function') {
+                var shim = mm2ShimContainer(postId, text);
+                if (shim) { try { orig(shim); } catch (e) {} }
+            } else if (typeof W().submitComment === 'function' && W().submitComment !== mm2Submit) {
+                var shim2 = mm2ShimContainer(postId, text);
+                if (shim2) { try { W().submitComment(shim2); } catch (e2) {} }
+            }
+            if (field) { field.value = ''; field.placeholder = '评论'; }
+        } finally {
+            mm2Submitting = false;
+            mm2PendingReply = null;
+            if (window.momentReplyTarget && window.momentReplyTarget.postId === postId) window.momentReplyTarget = null;
+        }
+        mm2Refresh();
+    }
+
+    function mm2FocusComment(postId) {
+        try { if (typeof W().focusComment === 'function') W().focusComment(postId); } catch (e) {}
+        var field = mm2FindField(postId);
+        if (field) { try { field.focus(); field.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e2) {} }
+    }
+
+    function mm2ClickIf(id, ids) {
+        var d = D();
+        if (!d) return false;
+        var list = ids || [id];
+        for (var i = 0; i < list.length; i++) {
+            var el = d.getElementById(list[i]);
+            if (el) { try { el.click(); return true; } catch (e) {} }
+        }
+        return false;
+    }
+
+    function mm2EditProfile() {
+        if (!mm2Picking) {
+            mm2Picking = true;
+            try { mm2Notify('点封面右下角可改头像，点签名可改签名', 'info', 2600); } catch (e) {}
+            setTimeout(function () { mm2Picking = false; }, 800);
+        }
+        if (!mm2ClickIf('momentCoverBtn', ['momentCoverBtn', 'momentCoverInput'])) {
+            if (!mm2ClickIf('homeCoverEdit', ['homeCoverEdit', 'homeCoverInput'])) mm2Notify('没找到更换封面的入口', 'warning', 2000);
+        }
+    }
+    function mm2Publish() {
+        if (!mm2ClickIf('momentPublishBtn')) mm2Notify('没找到发布入口，请从原朋友圈界面发布', 'warning', 2400);
+    }
+    function mm2OpenSettings() { mm2ClickIf('momentSettingsBtn'); }
+    function mm2Back() {
+        /* 先走原返回按钮（主程序自己的 close 处理），再无条件收起新界面：
+           即使原按钮不存在或没接处理器，也不会卡在朋友圈里出不去 */
+        try { mm2ClickIf('momentCloseBtn'); } catch (e) {}
+        mm2Hide();
+    }
+    function mm2EditAvatar() { mm2ClickIf('momentAvatar', ['momentAvatar', 'momentAvatarInput']); }
+    function mm2EditSignature() { mm2ClickIf('momentSignature'); }
+
+    /* ===== 访客记录（数据来自 featureData.moment2.visits，必要时本模块新建） ===== */
+    function mm2Pad(n) { n = num(n, 0); return (n < 10 ? '0' : '') + n; }
+    function mm2DayKey(ts) {
+        var d = new Date(ts);
+        return d.getFullYear() + '-' + mm2Pad(d.getMonth() + 1) + '-' + mm2Pad(d.getDate());
+    }
+    function mm2DayLabel(key) {
+        var p = String(key).split('-');
+        return num(p[1], 1) + '月' + num(p[2], 1) + '日';
+    }
+
+    function mm2RecordVisit(uid) {
+        if (uid === null || uid === undefined || uid === '') return false;
+        var list = mm2Visits();
+        var now = Date.now();
+        for (var i = list.length - 1; i >= 0 && i >= list.length - 6; i--) {
+            var v = list[i];
+            if (v && v.userId === uid && num(now - v.at, 1e9) < 600000) return false; /* 10 分钟内同一人只记一条 */
+        }
+        list.push({ userId: uid, at: now });
+        if (list.length > 300) list.splice(0, list.length - 300);
+        mm2Save();
+        return true;
+    }
+    function mm2RecordPartnerVisit() {
+        if (mm2Settings().isBlocked) return false;
+        if (Math.random() > 0.5) return false;   /* 梦角是否留下访客记录按概率判定，避免每次打开都刷一条 */
+        return mm2RecordVisit('partner');
+    }
+    function mm2RecordOpen() {
+        var ok = false;
+        try { if (mm2RecordVisit('me')) ok = true; } catch (e) {}
+        try { if (mm2RecordPartnerVisit()) ok = true; } catch (e2) {}
+        mm2VisitsRendered = false;
+        return ok;
+    }
+
+    function mm2RenderVisits() {
+        var box = $('mm2VisitList');
+        if (!box) return false;
+        /* 点击统一由 #mm2Root 委托 */
+        var list = mm2Visits().filter(function (v) { return v && v.at; }).slice().sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+        if (!list.length) {
+            box.innerHTML = '<div class="mm2-empty">还没有访客记录</div>';
+        } else {
+            var html = '', curKey = '';
+            list.forEach(function (v) {
+                var key = mm2DayKey(v.at);
+                if (key !== curKey) {
+                    curKey = key;
+                    html += '<div class="mm2-vgroup-head">' + mm2Esc(mm2DayLabel(key)) + '</div>';
+                }
+                var d = new Date(v.at);
+                html += '<div class="mm2-vrow">' +
+                    mm2AvatarHtml(v.userId, 'mm2-avatar') +
+                    '<div class="mm2-vname">' + mm2Esc(mm2UserName(v.userId)) + '</div>' +
+                    '<div class="mm2-vtime">' + mm2Pad(d.getHours()) + ':' + mm2Pad(d.getMinutes()) + '</div>' +
+                '</div>';
+            });
+            box.innerHTML = html;
+        }
+        return true;
+    }
+
+    function mm2ClearVisits() {
+        var done = function () {
+            var s = mm2Store();
+            s.visits = [];
+            mm2Save();
+            mm2RenderVisits();
+            mm2Notify('访客记录已清空', 'success', 2000);
+        };
+        if (typeof W().iosConfirm === 'function') {
+            var p = null;
+            try { p = W().iosConfirm('清空全部访客记录？', { okText: '清空', destructive: true }); } catch (e) { p = null; }
+            if (p && typeof p.then === 'function') { p.then(function (ok) { if (ok) done(); }); return; }
+        }
+        if (typeof W().confirm === 'function') { try { if (!W().confirm('清空全部访客记录？')) return; } catch (e2) {} }
+        done();
+    }
+
+    function mm2OpenVisits() {
+        try { mm2RecordVisit('me'); } catch (e) {}   /* 打开个人主页 = 记一条我的访问（真实行为） */
+        mm2Show(false);
+        mm2View = 'visits';
+        var fp = $('mm2FeedPane'), vp = $('mm2VisitPane'), sc = $('mm2Scroll');
+        if (fp) fp.hidden = true;
+        if (vp) vp.hidden = false;
+        mm2RenderVisits();
+        if (sc) { try { sc.scrollTop = 0; } catch (e2) {} }
+    }
+
+    /* ===== 挂载 / 显示 / 隐藏 ===== */
+    /* 与 @HTML 段完全同构的兜底结构（构建时若没把 HTML 拼进来，用这份自己挂载） */
+    var MM2_FALLBACK_HTML = '<div class="mm2-scroll">' +
+        '<div class="mm2-pane mm2-feed-pane" id="mm2FeedPane">' +
+            '<div id="mm2CoverBox"></div>' +
+            '<div class="mm2-feed" id="mm2Feed"></div>' +
+        '</div>' +
+        '<div class="mm2-pane" id="mm2VisitPane" hidden>' +
+            '<div class="mm2-visit-bar">' +
+                '<button class="mm2-visit-back" id="mm2VisitBack" type="button">← 返回</button>' +
+                '<span class="mm2-visit-title">访客记录</span>' +
+                '<button class="mm2-visit-clear" id="mm2VisitClear" type="button">清空</button>' +
+            '</div>' +
+            '<div id="mm2VisitList"></div>' +
+        '</div>' +
+    '</div><div id="mm2FabBox"></div>';
+
+    /* 构建时主程序会把 @HTML 段拼进页面；这里保留同名兜底（与 @HTML 段结构一致），
+       保证本文件单独注入（没有拼 HTML）时也能自己造出根容器。 */
+    function mm2Html() {
+        return '<div id="mm2Root" aria-hidden="false">' + MM2_FALLBACK_HTML + '</div>';
+    }
+
+    function mm2Ensure() {
+        var d = D();
+        if (!d || !d.body) return null;
+        var root = $(ROOT_ID);
+        if (!root) {
+            var markup = '';
+            try { markup = mm2Html(); } catch (e) {}
+            root = mEl('div');
+            root.id = ROOT_ID;
+            root.innerHTML = markup;
+            /* @HTML 段本身就以 #mm2Root 为根节点：解析后取它的子节点，避免多套一层 */
+            if (root.firstElementChild && root.firstElementChild.id === ROOT_ID) {
+                var inner = root.firstElementChild;
+                root = mEl('div');
+                root.id = ROOT_ID;
+                root.innerHTML = inner.innerHTML;
+            }
+            if (!root.firstElementChild) root.innerHTML = MM2_FALLBACK_HTML;
+            d.body.appendChild(root);
+        }
+        return root;
+    }
+
+    function mm2Show(record) {
+        var root = mm2Ensure();
+        if (!root) return false;
+        /* 根节点统一委托：封面栏（返回 / 编辑 / 访客记录）、浮动按钮、访客页都靠它 */
+        if (!root.dataset.mm2Bound) { root.dataset.mm2Bound = '1'; root.addEventListener('click', mm2OnClick); }
+        root.classList.add('mm2-on');
+        /* 记录访问：mm2RecordVisit 自带 10 分钟去重，多次调用不会刷屏 */
+        if (record) { try { mm2RecordOpen(); } catch (e) {} }
+        mm2View = 'feed';
+        var fp = $('mm2FeedPane'), vp = $('mm2VisitPane');
+        if (fp) fp.hidden = false;
+        if (vp) vp.hidden = true;
+        mm2RenderFab();
+        mm2RenderCover();
+        mm2RenderFeed();
+        return true;
+    }
+    function mm2Hide() {
+        var root = $(ROOT_ID);
+        if (root) root.classList.remove('mm2-on');
+    }
+
+    /* 原 DOM 只隐藏不删除（重复点朋友圈时也会再兜一次） */
+    function mm2HideLegacy() {
+        var m = $('momentModal');
+        if (m) {
+            try { m.classList.add('mm2-legacy-hidden'); } catch (e) {}
+            try { if (m.style.display !== 'none') m.style.display = 'none'; } catch (e2) {}
+        }
+    }
+
+    /* ===== 与主程序同步：接管显示，但业务入口全部沿用原函数 ===== */
+    function mm2Refresh() {
+        if (!mm2Ready) return false;
+        mm2RenderCover();
+        mm2RenderFeed();
+        if (mm2View === 'visits' || mm2VisitsRendered) mm2RenderVisits();
+        return true;
+    }
+
+    /* 新界面没打开时，一律交回主程序自己的渲染逻辑（原 DOM 一个节点都不动） */
+    function mm2RenderListFallback() {
+        try {
+            var orig = mm2Orig && mm2Orig.renderMoments;
+            if (typeof orig === 'function') {
+                mm2Rendering = true;
+                try { return orig(); } catch (e) {} finally { mm2Rendering = false; }
+            }
+        } catch (e2) {}
+        return undefined;
+    }
+
+    function mm2SyncFromOriginal() {
+        var root = $(ROOT_ID);
+        if (!root || !root.classList.contains('mm2-on')) { mm2RenderListFallback(); return false; }
+        if (mm2Rendering) { mm2RenderListFallback(); return false; }
+        mm2RenderCover();
+        mm2RenderFeed();
+        if (mm2View === 'visits') mm2RenderVisits();
+        return true;
+    }
+
+    /* ===== 独立打开兜底：主程序 openMoments 不存在时的入口 ===== */
+    function mm2OpenFallback() {
+        mm2Ready = true;
+        mm2Show(true);
+        mm2HideLegacy();
+        var m = $('momentModal');
+        if (m) {
+            if (!mm2RawShow) {
+                mm2RawShow = true;
+                try {
+                    if (typeof W().showModal === 'function') W().showModal(m);
+                    else m.style.display = 'flex';
+                } catch (e2) { try { m.style.display = 'flex'; } catch (e3) {} }
+                mm2RawShow = false;
+            }
+        }
+        return true;
+    }
+
+    function mm2Install() {
+        var w = W();
+        if (!w) return false;
+        if (!mm2Orig) mm2Orig = {};
+        var grab = function (key) { try { if (!mm2Orig[key] && typeof w[key] === 'function') mm2Orig[key] = w[key]; } catch (e) {} };
+        ['openMoments', 'renderMoments', 'renderMomentProfile', 'submitComment', 'focusComment', 'toggleLike',
+         'viewImage', 'iosConfirm', 'showModal', 'hideModal', 'deleteComment', 'getUserAvatar', 'formatMomentTime',
+         'saveData', 'showNotification', 'escapeHtml', 'deleteMoment', 'editProfileField'].forEach(grab);
+
+        /* openMoments：主程序所有打开朋友圈的路径（含主页功能格）都会走这里 */
+        try {
+            w.openMoments = function () {
+                var r = null;
+                try { if (typeof mm2Orig.openMoments === 'function') r = mm2Orig.openMoments.apply(this, arguments); } catch (e) {}
+                var ok = false;
+                try { ok = mm2Show(true); } catch (e2) {}
+                if (!ok) { try { r = mm2OpenFallback(); } catch (e3) {} }
+                try { mm2HideLegacy(); } catch (e4) {}
+                return (r === undefined) ? true : r;
+            };
+        } catch (e) {}
+
+        /* renderMoments：主程序内部每次刷新都会走这里 → 同步新界面并把旧 DOM 藏起来 */
+        try {
+            w.renderMoments = function () {
+                if (mm2Rendering) {
+                    var ret = null;
+                    try { if (typeof mm2Orig.renderMoments === 'function') ret = mm2Orig.renderMoments.apply(this, arguments); } catch (e) {}
+                    return ret;
+                }
+                var on = false;
+                var root = $(ROOT_ID);
+                if (root && root.classList.contains('mm2-on')) on = true;
+                if (!on) return (typeof mm2Orig.renderMoments === 'function') ? mm2Orig.renderMoments.apply(this, arguments) : undefined;
+                try { mm2HideLegacy(); } catch (e2) {}
+                return mm2SyncFromOriginal();
+            };
+        } catch (e) {}
+
+        /* showModal / hideModal：让新界面跟随原弹窗的开关（点蒙层关闭等路径都覆盖） */
+        try {
+            w.showModal = function (el) {
+                var ret = (typeof mm2Orig.showModal === 'function') ? mm2Orig.showModal.apply(this, arguments) : undefined;
+                try { if (el && el.id === 'momentModal' && !mm2RawShow) { mm2Show(false); mm2HideLegacy(); } } catch (e) {}
+                return ret;
+            };
+        } catch (e) {}
+        try {
+            w.hideModal = function (el) {
+                var ret = (typeof mm2Orig.hideModal === 'function') ? mm2Orig.hideModal.apply(this, arguments) : undefined;
+                try { if (el && el.id === 'momentModal') mm2Hide(); } catch (e) {}
+                return ret;
+            };
+        } catch (e) {}
+        return true;
+    }
+
+    function mm2Boot() {
+        mm2Ensure();
+        mm2Install();
+        mm2HideLegacy();
+        mm2Ready = true;
+        return true;
+    }
+
+    /* 幂等初始化：延迟到原 DOM 就绪后接管 */
+    function initMoment2Feature() {
+        try {
+            var w = W();
+            if (!w) return false;
+            if (w.__mm2MomentFeature && w.__mm2MomentFeature.version === VERSION) {
+                try { mm2Boot(); } catch (e) {}
+                return true;
+            }
+            w.__mm2MomentFeature = { version: VERSION, ready: false, bootAt: Date.now() };
+            var d = D();
+            if (d && d.body) {
+                mm2Boot();
+                w.__mm2MomentFeature.ready = true;
+            } else if (d) {
+                try {
+                    d.addEventListener('DOMContentLoaded', function () {
+                        mm2Boot();
+                        w.__mm2MomentFeature.ready = true;
+                    });
+                } catch (e2) {}
+            }
+            return true;
+        } catch (e3) { return false; }
+    }
+
+    window.initMoment2Feature = initMoment2Feature;
+    window.mm2Show = mm2Show;   // 供主程序调用
+    window.mm2Hide = mm2Hide;
+
+    /* 调试 / 自检用的最小接口（不改任何业务逻辑） */
+    window.moment2Feature = {
+        version: VERSION,
+        init: initMoment2Feature,
+        show: mm2Show,
+        hide: mm2Hide,
+        refresh: mm2Refresh,
+        openVisits: mm2OpenVisits,
+        recordVisit: mm2RecordVisit,
+        clearVisits: mm2ClearVisits,
+        visits: function () { return mm2Visits().slice(); },
+        renderFeed: mm2RenderFeed,
+        renderVisits: mm2RenderVisits,
+        renderCover: mm2RenderCover,
+        postHtml: mm2PostHtml,
+        coverHtml: mm2CoverHtml,
+        view: function () { return mm2View; },
+        ensure: mm2Ensure,
+        install: mm2Install,
+        on: function () { var r = $(ROOT_ID); return !!(r && r.classList.contains('mm2-on')); },
+        legacyHidden: function () { var m = $('momentModal'); return !!(m && m.style.display === 'none'); },
+        handleClick: mm2OnClick,
+        submit: mm2Submit,
+        replyTo: mm2ReplyTo,
+        deletePost: mm2DeletePost,
+        deleteComment: mm2DeleteComment,
+        toggleLike: mm2ToggleLike
+    };
+})();
+
+})();
 /* ===== 功能模块：slim（存储体检） ===== */
 (function(){
 (function () {
