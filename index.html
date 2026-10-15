@@ -12877,6 +12877,43 @@ if (img) { viewImage(img.dataset.src); return; }
         if (!fd) return;
         done = true;
         var freed = 0, changed = false;
+        // ===== 图片自愈：启动时头像/背景可能被某步清空，从 localStorage 镜像拿回来 =====
+        try {
+            var rawMirror = window.localStorage.getItem('CHAT_APP_V13_appData');
+            if (rawMirror) {
+                var parsed = JSON.parse(rawMirror);
+                var pfd = (parsed && parsed.featureData) || {};
+                var plib = pfd.avatarLib || {};
+                var lib = fd.avatarLib || (fd.avatarLib = { mine: [], partner: [] });
+                var restore = false;
+                if (plib.mine && plib.mine.length && (!lib.mine || !lib.mine.length)) { lib.mine = plib.mine.slice(); restore = true; }
+                if (plib.partner && plib.partner.length && (!lib.partner || !lib.partner.length)) { lib.partner = plib.partner.slice(); restore = true; }
+                if (typeof plib.currentMine === 'string' && plib.currentMine && !lib.currentMine) { lib.currentMine = plib.currentMine; restore = true; }
+                if (typeof plib.currentPartner === 'string' && plib.currentPartner && !lib.currentPartner) { lib.currentPartner = plib.currentPartner; restore = true; }
+                ['homePageBg', 'togetherBg'].forEach(function (k) {
+                    if (pfd[k] && pfd[k].image && (!fd[k] || !fd[k].image)) { fd[k] = pfd[k]; restore = true; }
+                });
+                if (pfd.loveDiary && pfd.loveDiary.bg && pfd.loveDiary.bg.image) {
+                    var ld = fd.loveDiary || (fd.loveDiary = {});
+                    if (!ld.bg || !ld.bg.image) { ld.bg = pfd.loveDiary.bg; restore = true; }
+                }
+                if (restore) {
+                    function _paint(sel, src) {
+                        var box = document.querySelector(sel);
+                        if (!box || !src) return;
+                        var img = box.querySelector('img');
+                        if (!img) { img = document.createElement('img'); box.appendChild(img); }
+                        img.src = src;
+                    }
+                    _paint('#myAvatar', lib.currentMine);
+                    _paint('#partnerAvatar', lib.currentPartner);
+                    try { if (typeof renderHomeProfile === 'function') renderHomeProfile(); } catch (e) {}
+                    try { if (typeof renderMomentProfile === 'function') renderMomentProfile(); } catch (e) {}
+                    try { if (typeof saveData === 'function') saveData(); } catch (e) {}
+                    notify('已自动恢复头像/背景', 'success');
+                }
+            }
+        } catch (e) {}
         try {
             // 1) 头像库：裁剪数量
             var lib = fd.avatarLib || (fd.avatarLib = { mine: [], partner: [] });
