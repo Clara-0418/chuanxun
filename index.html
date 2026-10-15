@@ -12902,15 +12902,14 @@ if (img) { viewImage(img.dataset.src); return; }
                     if (!ld.bg || !ld.bg.image) { ld.bg = pfd.loveDiary.bg; restore = true; }
                 }
                 if (restore) {
-                    function _paint(sel, src) {
-                        var box = document.querySelector(sel);
-                        if (!box || !src) return;
-                        var img = box.querySelector('img');
-                        if (!img) { img = document.createElement('img'); box.appendChild(img); }
-                        img.src = src;
+                    function _applyAvatar(who, src) {
+                        if (!src) return;
+                        var el = document.getElementById(who === 'partner' ? 'partnerAvatar' : 'myAvatar');
+                        if (el) el.innerHTML = '<img src="' + src + '" alt="avatar">';
                     }
-                    _paint('#myAvatar', lib.currentMine);
-                    _paint('#partnerAvatar', lib.currentPartner);
+                    _applyAvatar('partner', lib.currentPartner);
+                    _applyAvatar('mine', lib.currentMine);
+                    try { if (typeof renderMessages === 'function') renderMessages(); } catch (e) {}
                     try { if (typeof renderHomeProfile === 'function') renderHomeProfile(); } catch (e) {}
                     try { if (typeof renderMomentProfile === 'function') renderMomentProfile(); } catch (e) {}
                     try { if (typeof saveData === 'function') saveData(); } catch (e) {}
