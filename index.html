@@ -7283,7 +7283,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 unblockCooldown: false,
                 unblockCooldownTimer: null,
                 dynamicIslandAudio: true, // 后台保活的总开关（默认开）
-                keepAliveStrong: false, // 强力保活：占用播放通道，会打断其它 App（默认关）
+                keepAliveStrong: true, // 强力保活：占用播放通道（默认开，设置里可关）
             };
 
             let customReplies = ['想你了，今天有好好吃饭吗？', '我一直在你身边哦 ✦', '今天天气很好，就像你的笑容一样', '你是我最珍贵的遇见', '累了就休息一下吧，我陪着你',
@@ -7536,21 +7536,31 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             const memStore = {};
             let storageSlow = false; // 存储层超时降级标志：为 true 时写入走 localStorage，避免覆盖主存储里的旧数据
             function storageGet(key) {
-                try {
-                    if (typeof localforage !== 'undefined' && localforage && localforage.getItem) return localforage
-                        .getItem(key);
-                } catch (e) {}
-                try {
-                    const raw = window.localStorage.getItem(key);
-                    return Promise.resolve(raw ? JSON.parse(raw) : null);
-                } catch (e) { return Promise.resolve(memStore[key] || null); }
+                var _fromLocal = function () {
+                    try { var raw = window.localStorage.getItem(key); return Promise.resolve(raw ? JSON.parse(raw) : null); }
+                    catch (e) { return Promise.resolve(memStore[key] || null); }
+                };
+                var useLF = false;
+                try { useLF = !!(typeof localforage !== 'undefined' && localforage && localforage.getItem); } catch (e) {}
+                if (useLF) {
+                    try {
+                        return localforage.getItem(key).then(function (v) {
+                            return (v !== null && v !== undefined) ? v : _fromLocal();
+                        }, function () { return _fromLocal(); });
+                    } catch (e) { return _fromLocal(); }
+                }
+                return _fromLocal();
             }
 
             function storageSet(key, value) {
                 memStore[key] = value;
                 try {
-                    if (!storageSlow && typeof localforage !== 'undefined' && localforage && localforage.setItem) return localforage
-                        .setItem(key, value);
+                    if (!storageSlow && typeof localforage !== 'undefined' && localforage && localforage.setItem) {
+                        return Promise.resolve(localforage.setItem(key, value)).catch(function () {
+                            try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+                            return value;
+                        });
+                    }
                 } catch (e) {}
                 try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
                 return Promise.resolve(value);
@@ -7587,8 +7597,6 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         // 消息一多就卡。现在最多每 10 秒写一次；页面隐藏/退出时强制写，保证不丢。
                         const __mirrorNow = Date.now();
                         const __mirrorForce = !!(typeof document !== 'undefined' && document.hidden);
-                        if (__mirrorForce || __mirrorNow - lastMirrorAt > 10000) {
-                            lastMirrorAt = __mirrorNow;
                         try {
                             window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(data));
                         } catch (e) {
@@ -7606,7 +7614,6 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                                 if (light.settings && light.settings.chatBgImage) light.settings.chatBgImage = '';
                                 window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(light));
                             } catch (e2) {}
-                        }
                         }
                         return storageSet(getStorageKey('appData'), data).catch(e => console.warn('Save error:',
                             e));
@@ -7716,7 +7723,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         if (settings.enableRandomMeme === undefined) settings.enableRandomMeme = true;
                         if (settings.chatBgOverlay === undefined) settings.chatBgOverlay = 0;
                         if (settings.dynamicIslandAudio === undefined) settings.dynamicIslandAudio = true;
-                if (settings.keepAliveStrong === undefined) settings.keepAliveStrong = false;
+                if (settings.keepAliveStrong === undefined) settings.keepAliveStrong = true;
                         if (settings.momentFreq === undefined) settings.momentFreq = 5;
                         if (settings.momentReplyChance === undefined) settings.momentReplyChance = 40;
                         if (settings.momentLikeChance === undefined) settings.momentLikeChance = 30;
