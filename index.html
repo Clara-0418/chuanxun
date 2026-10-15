@@ -15671,7 +15671,23 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
         var an = el('hwAnniv');
         if (an) an.addEventListener('click', function () { close(); try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
     }
+    /* 聊天页状态胶囊：去掉 emoji（按用户要求，只留文字） */
+    function stripStatusEmoji() {
+        try {
+            var strip = function (s) { return String(s == null ? '' : s).replace(/^[^0-9A-Za-z\u4e00-\u9fa5]+/, ''); };
+            var s = window.settings || {};
+            if (s.partnerStatus) s.partnerStatus = strip(s.partnerStatus);
+            if (s.myStatus) s.myStatus = strip(s.myStatus);
+            var fd = window.featureData || {};
+            if (fd.status) { if (fd.status.partner) fd.status.partner.emoji = ''; if (fd.status.mine) fd.status.mine.emoji = ''; }
+            var pSpan = document.querySelector('#partnerStatus span');
+            if (pSpan) { var pv = strip(s.partnerStatus || pSpan.textContent); if (pv && pSpan.textContent !== pv) pSpan.textContent = pv; }
+            var mSpan = document.getElementById('myStatusText');
+            if (mSpan) { var mv = strip(s.myStatus || mSpan.textContent); if (mv && mSpan.textContent !== mv) mSpan.textContent = mv; }
+        } catch (e) {}
+    }
     function gear() {
+        try { stripStatusEmoji(); } catch (e) {}
         // 没设纪念日时徽标是空的：给个可点提示，别留个空药丸
         try {
             var badge = el('lovHomeDays');
