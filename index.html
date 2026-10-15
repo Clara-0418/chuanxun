@@ -9931,10 +9931,12 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         item.innerHTML =
                             `<img src="${escapeHtml(src)}" loading="lazy" decoding="async"><div class="sticker-delete-btn" data-idx="${idx}" title="删除"><i class="fas fa-times"></i></div>`;
                         // 表情包要连点两次才发出，避免误触（第一次选中并提示）
-                        item.querySelector('img').addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            stickerTapToSend(src, item);
-                        });
+// 整块磁贴都能点：原来只绑在 img 上，点到边缘不算点击，会多出一次操作
+item.addEventListener('click', function(e) {
+if (e.target.closest('.sticker-delete-btn')) return;
+e.stopPropagation();
+stickerTapToSend(src, item);
+});
                         item.querySelector('.sticker-delete-btn').addEventListener('click', async function(
                         e) { e.stopPropagation(); if (await iosConfirm('删除这个表情？', { okText: '删除', destructive: true })) { myStickerLibrary
                                     .splice(idx, 1);
@@ -10019,7 +10021,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 const now = Date.now();
                 // 判定"是不是同一张的第二次点击"：优先看这张是否已处于选中态，其次看 6 秒内点过同一张
                 const sameElSelected = !!(el && el.classList.contains('tap-again'));
-                const sameRecent = lastStickerTap.src === src && now - lastStickerTap.at < 6000;
+                const sameRecent = lastStickerTap.src === src && now - lastStickerTap.at < 12000;
                 if (sameElSelected || sameRecent) {
                     lastStickerTap = { src: '', at: 0 };
                     document.querySelectorAll('.sticker-grid-item.tap-again').forEach(n => n.classList.remove(
