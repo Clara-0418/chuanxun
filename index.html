@@ -6238,6 +6238,12 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         #inAppMsgPopup .ia-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
         #inAppMsgPopup .ia-text { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+        /* ===== 朋友圈评论：长文本自动换行，不再溢出/错位 ===== */
+        .moment-comment { display: block !important; line-height: 1.6 !important; word-break: break-word !important; overflow-wrap: anywhere !important; white-space: normal !important; }
+        .moment-comment .cname { display: inline !important; white-space: normal !important; word-break: break-word !important; }
+        .moment-comment span { word-break: break-word !important; overflow-wrap: anywhere !important; }
+        .moment-interact, .moment-body { word-break: break-word !important; overflow-wrap: anywhere !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -8687,6 +8693,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 const rpChance = Math.max(0, Math.min(100, numOr(settings.partnerRedPacketChance, 12)));
                 if (settings.partnerRedPacketEnabled !== false && Math.random() * 100 < rpChance) {
                     messages.forEach(m => { if (isUserSender(m.sender) && m.status !== 'read') m.status = 'read'; });
+                    try { requestRender(); } catch (e) {}
+                    try { requestRender(); } catch (e) {}   // 先显示已读，再发回复
                     partnerSendRedPacket();
                     return;
                 }
@@ -10887,11 +10895,11 @@ if (img) { viewImage(img.dataset.src); return; }
 
                 if (currentFillData.stepPhase === 'user_comment' && enableComment) {
                     html +=
-                        `<div class="comment-section"><div class="comment-label">💬 对梦角的选择进行点评</div><textarea id="stepCommentInput" placeholder="输入你的点评…" style="width:100%;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--secondary-bg);color:var(--text-primary);font-family:var(--font-family);font-size:13px;resize:vertical;min-height:40px;outline:none;margin-top:4px;transition:border-color 0.2s;">${escapeHtml(currentFillData.userComments['partner'] || '')}</textarea></div>`;
+                        `<div class="comment-section"><div class="comment-label">💬 对梦角的选择进行点评</div><textarea id="stepCommentInput" placeholder="输入你的点评…" style="width:100%;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--secondary-bg);color:var(--text-primary);font-family:var(--font-family);font-size:13px;resize:vertical;min-height:40px;outline:none;margin-top:4px;transition:border-color 0.2s;">${escapeHtml(currentFillData.userComments[step] || '')}</textarea></div>`;
                 }
                 if (currentFillData.stepPhase === 'partner_comment' && enableComment) {
                     html +=
-                        `<div class="comment-section" style="border-left-color:#4A90E2;"><div class="comment-label" style="color:#4A90E2;">💬 梦角对你的点评</div><div style="padding:6px 10px;background:var(--secondary-bg);border-radius:6px;font-size:13px;color:var(--text-primary);">${escapeHtml(currentFillData.partnerComments['user'] || '（等待梦角点评…）')}</div></div>`;
+                        `<div class="comment-section" style="border-left-color:#4A90E2;"><div class="comment-label" style="color:#4A90E2;">💬 梦角对你的点评</div><div style="padding:6px 10px;background:var(--secondary-bg);border-radius:6px;font-size:13px;color:var(--text-primary);">${escapeHtml(currentFillData.partnerComments[step] || '（等待梦角点评…）')}</div></div>`;
                 }
 
                 if (currentFillData.stepPhase === 'done') {
@@ -10948,7 +10956,7 @@ if (img) { viewImage(img.dataset.src); return; }
                 if (commentSubmit) {
                     commentSubmit.addEventListener('click', function() {
                         const text = document.getElementById('stepCommentInput').value.trim();
-                        if (text) currentFillData.userComments['partner'] = text;
+                        if (text) { currentFillData.userComments['partner'] = text; currentFillData.userComments[currentFillData.currentStep] = text; }
                         else showNotification('点评已跳过', 'info', 1500);
                         currentFillData.stepPhase = 'partner_comment';
                         renderStep(idx); // 点评的自动生成由 renderStep 内统一调度（避免重复排两个定时器）
@@ -10989,6 +10997,7 @@ if (img) { viewImage(img.dataset.src); return; }
                         const comment = allPools.length > 0 ? getRandomItem(allPools) : '很有意思的答案 ✦';
                         currentFillData.partnerCommentSteps[step] = true;
                         currentFillData.partnerComments['user'] = comment;
+                        currentFillData.partnerComments[step] = comment;
                         currentFillData.stepPhase = 'done';
                         renderStep(idx);
                         showNotification(`💬 梦角点评了你：${comment}`, 'info', 2000);
@@ -11038,7 +11047,7 @@ if (img) { viewImage(img.dataset.src); return; }
                 const historyItem = {
                     surveyName: survey.name,
                     answers: answers,
-                    userComment: currentFillData.userComments['partner'] || '',
+                    userComment: currentFillData.userComments[step] || '',
                     partnerComment: currentFillData.partnerComments['user'] || '',
                     timestamp: new Date().toISOString(),
                     from: 'both'
