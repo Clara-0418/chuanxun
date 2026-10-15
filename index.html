@@ -7592,27 +7592,35 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                             surveyHistory, _v: 14
                         };
                         data.savedAt = Date.now();
-                        // 同步写一份 localStorage 镜像：意外退出/被系统杀进程时也能恢复
-                        // 镜像节流（性能关键）：以前每条消息都要把全部数据 JSON.stringify 一次并同步写盘，
-                        // 消息一多就卡。现在最多每 10 秒写一次；页面隐藏/退出时强制写，保证不丢。
-                        const __mirrorNow = Date.now();
-                        const __mirrorForce = !!(typeof document !== 'undefined' && document.hidden);
+                        // 同步写一份 localStorage 镜像（含图片）：这是"后台被杀"时唯一能恢复的来源。
+                        // 写不下时按优先级腾空间：先丢最旧的消息保住图片/设置；实在不行才降级成无图镜像。
+                        const __mk = getStorageKey('appData');
                         try {
-                            window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(data));
+                            window.localStorage.setItem(__mk, JSON.stringify(data));
                         } catch (e) {
-                            // 图片类数据把 5MB 配额撑爆时：写一份不含图片的轻量镜像，
-                            // 至少保证设置 / 昵称 / 字卡 / 消息不丢（图片仍在 IndexedDB 里）。
                             try {
                                 var light = Object.assign({}, data);
-                                var fd = Object.assign({}, light.featureData || {});
-                                if (fd.avatarLib) fd.avatarLib = { mine: [], partner: [], currentMine: fd.avatarLib.currentMine, currentPartner: fd.avatarLib.currentPartner };
-                                if (fd.homePageBg) fd.homePageBg = { image: '', color: fd.homePageBg.color, overlay: fd.homePageBg.overlay };
-                                if (fd.togetherBg) fd.togetherBg = { image: '', color: fd.togetherBg.color, overlay: fd.togetherBg.overlay };
-                                if (fd.loveDiary && fd.loveDiary.bg) fd.loveDiary.bg = { image: '', color: fd.loveDiary.bg.color, overlay: fd.loveDiary.bg.overlay };
-                                if (fd.companyDiary && fd.companyDiary.bg) fd.companyDiary.bg = { image: '', color: fd.companyDiary.bg.color, overlay: fd.companyDiary.bg.overlay };
-                                light.featureData = fd;
-                                if (light.settings && light.settings.chatBgImage) light.settings.chatBgImage = '';
-                                window.localStorage.setItem(getStorageKey('appData'), JSON.stringify(light));
+                                var __ok = false;
+                                if (Array.isArray(light.messages) && light.messages.length > 40) {
+                                    var __msgs = light.messages;
+                                    for (var __cut = Math.max(40, Math.floor(__msgs.length / 2)); __cut >= 40; __cut = Math.max(40, Math.floor(__cut / 2))) {
+                                        light.messages = __msgs.slice(__msgs.length - __cut);
+                                        try { window.localStorage.setItem(__mk, JSON.stringify(light)); __ok = true; break; }
+                                        catch (e2) { if (__cut <= 40) break; }
+                                    }
+                                }
+                                if (!__ok) {
+                                    // 最后手段：无图镜像（图片留在 IndexedDB，若进程被杀未提交则可能丢图）
+                                    var fd = Object.assign({}, light.featureData || {});
+                                    if (fd.avatarLib) fd.avatarLib = { mine: [], partner: [], currentMine: fd.avatarLib.currentMine, currentPartner: fd.avatarLib.currentPartner };
+                                    if (fd.homePageBg) fd.homePageBg = { image: '', color: fd.homePageBg.color, overlay: fd.homePageBg.overlay };
+                                    if (fd.togetherBg) fd.togetherBg = { image: '', color: fd.togetherBg.color, overlay: fd.togetherBg.overlay };
+                                    if (fd.loveDiary && fd.loveDiary.bg) fd.loveDiary.bg = { image: '', color: fd.loveDiary.bg.color, overlay: fd.loveDiary.bg.overlay };
+                                    if (fd.companyDiary && fd.companyDiary.bg) fd.companyDiary.bg = { image: '', color: fd.companyDiary.bg.color, overlay: fd.companyDiary.bg.overlay };
+                                    light.featureData = fd;
+                                    if (light.settings && light.settings.chatBgImage) light.settings.chatBgImage = '';
+                                    try { window.localStorage.setItem(__mk, JSON.stringify(light)); } catch (e4) {}
+                                }
                             } catch (e2) {}
                         }
                         return storageSet(getStorageKey('appData'), data).catch(e => console.warn('Save error:',
