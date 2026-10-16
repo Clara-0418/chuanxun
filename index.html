@@ -4796,6 +4796,25 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：walk ===== */
+/* walk-styles */
+/* walk：手机运动传感器计步（「你我之间」弹层里「我的步数」那一行的小按钮）。配色全部走主题变量，深色模式可用，无 emoji。 */
+.together-row .walk-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid rgba(var(--accent-color-rgb), 0.45); border-radius: 999px; background: rgba(var(--accent-color-rgb), 0.12); color: var(--accent-color); font-family: var(--font-family); font-size: 11.5px; line-height: 1.4; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.together-row .walk-btn:active { transform: scale(0.96); }
+.walk-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); opacity: 0.5; transition: opacity 0.2s, background 0.2s; }
+.walk-counting { color: var(--accent-color); border-color: var(--accent-color); background: rgba(var(--accent-color-rgb), 0.2); }
+.walk-counting .walk-dot { background: var(--accent-color); opacity: 1; animation: walk-pulse 1.6s ease-in-out infinite; }
+.walk-paused { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }
+.walk-paused .walk-dot { background: var(--text-secondary); opacity: 0.85; }
+.walk-nodata { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }
+.walk-nodata .walk-dot { background: var(--text-secondary); opacity: 0.4; animation: none; }
+.walk-degraded { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }
+.walk-degraded .walk-dot { background: var(--text-secondary); opacity: 0.4; }
+@keyframes walk-pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+html[data-theme="dark"] .together-row .walk-btn { background: rgba(var(--accent-color-rgb), 0.16); }
+html[data-theme="dark"] .walk-paused, html[data-theme="dark"] .walk-nodata, html[data-theme="dark"] .walk-degraded { background: transparent; }
+@media (max-width: 360px) { .together-row .walk-btn { padding: 3px 7px; gap: 4px; font-size: 11px; } }
+
 /* ===== 功能模块：shop3 ===== */
 /* ===== 功能模块：商城 shop3（视觉重做层 · 只做外观与排布）=====
    只做两块：A 添加商品表单（参考图 2 排布）、B 订单「梦角的回复」底部弹层（参考图 1）。
@@ -7469,6 +7488,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：walk ===== -->
+<template id="walkBtnTpl"><button type="button" id="walkToggleBtn" class="together-edit walk-btn walk-idle" aria-pressed="false"><span class="walk-dot" id="walkDot"></span><span class="walk-btn-text" id="walkBtnText">开始计步</span></button></template>
+
 <!-- ===== 功能模块：shop3 ===== -->
 <div id="shop3Root" aria-hidden="true"></div>
 
@@ -13362,7 +13384,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14016,6 +14038,660 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：walk（独立作用域） ===== */
+(function(){
+
+/* walk：用手机运动传感器统计步数（挂在「你我之间」弹层「我的步数」那一行的小按钮上）
+   目标与边界：
+   1) 权限：iOS 13+ Safari 必须在用户手势里调 DeviceMotionEvent.requestPermission()。
+      所以本模块不做任何自动申请 —— 只有用户点「开始计步」那个小按钮时才申请。
+   2) 算法：devicemotion 的 accelerationIncludingGravity（读不到退回 acceleration）→ 合加速度模长
+      → 减去重力 → 低通滤波（EMA）→ 阈值 + 滞回 + 最小步间隔去抖 → 计一步。参数见下面常量。
+   3) 存储：沿用主程序原来的步数字段 featureData.status.mine.steps（togetherEnsureExtra 初始化、
+      togetherRender 渲染、saveData 落盘）。本模块只多存一份 featureData.walk = {date, steps, base, ...}
+      用来记「本地 YYYY-MM-DD」做跨天归零；每次计步都把 base + steps 镜像回 mine.steps 并调 window.saveData()。
+   4) 降级：没有 DeviceMotionEvent / 授权被拒 / 启动失败 → 中文提示「网页无法读取手机健康里的步数，
+      只能用传感器在打开页面时估算」，并保证「更新」按钮的手动填写照旧可用。
+   5) 不污染其它功能：模块只在 #togetherMySteps 这一行加一个按钮，只写 #togetherMySteps 的文字，
+      从不碰 #togetherPartnerSteps；弹层不可见时不动 DOM。
+   对外：window.initWalkFeature()（幂等）/ window.walkModule（调试与自检） */
+(function () {
+    'use strict';
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (window.walkModule) return;                                  // 同一页面只安装一次（幂等）
+
+    /* ================= 常量（要调参改这里） ================= */
+    var WALK_KEY = 'walk';                    // 唯一新增的数据键：featureData.walk
+    var GRAVITY = 9.80665;                    // 重力（accelerationIncludingGravity 里带着它）
+    var LPF_ALPHA = 0.25;                     // 低通滤波系数（EMA）：越小越平滑、越迟钝
+    var PEAK_THRESHOLD = 1.2;                 // 峰值触发阈值（m/s^2，扣掉重力后的动态值）
+    var RELEASE_THRESHOLD = 0.35;             // 回落到该值以下才重新武装（滞回，防一次波峰计多步）
+    var MIN_STEP_INTERVAL_MS = 280;           // 最小步间隔（去抖，250-300ms）
+    var RESET_GAP_MS = 1000;                  // 采样间隔超过该值：重置滤波（刚拿起手机时不误判）
+    var SENSOR_TIMEOUT_MS = 15000;            // 多久没收事件就提示「未检测到传感器」
+    var SENSOR_CHECK_MS = 2000;               // 守门检查周期
+    var SAVE_MIN_INTERVAL_MS = 1500;          // 步数落盘的最小间隔（saveData 本身还有 150ms 防抖）
+
+    /* 主程序里已经存在的锚点（只读复用，不改主文件） */
+    var MODAL_ID = 'togetherModal';
+    var STEPS_ID = 'togetherMySteps';
+    var LEGACY_BTN_ID = 'togetherMyStepsBtn';
+    /* 本模块自己的 id / class，一律 walk 前缀 */
+    var BTN_ID = 'walkToggleBtn';
+    var TEXT_ID = 'walkBtnText';
+    var DOT_ID = 'walkDot';
+    var TPL_ID = 'walkBtnTpl';
+    var CSS_ID = 'walkStyles';
+    var CSS_MARK = 'walk-styles';
+    /* 主程序「更新」按钮原来会先跑它那套旧计步（全局只绑一次、无暂停、无跨天、无 DOM 更新）。
+       这里把它改成纯手动填写入口：既满足「保留原来的手动输入方式」，又避免两套监听同时计数。
+       想恢复主程序原行为，把下面这个常量改成 false 即可。 */
+    var TAKEOVER_LEGACY_BTN = true;
+
+    /* ================= 文案（无 emoji） ================= */
+    var T_IDLE = '开始计步';
+    var T_COUNTING = '计步中';
+    var T_PAUSED = '已暂停';
+    var T_NO_DATA = '未检测到传感器';
+    var T_DEGRADED = '传感器不可用';
+    var MSG_NO_DM = '网页无法读取手机健康里的步数，只能用传感器在打开页面时估算：这台设备或浏览器没有运动传感器接口（DeviceMotionEvent），可以继续用「更新」手动填写今天的步数。';
+    var MSG_DENIED = '没有拿到运动传感器权限，网页无法读取手机健康里的步数，只能用传感器在打开页面时估算：可以继续用「更新」手动填写今天的步数。';
+    var MSG_FAIL = '运动传感器启动失败，网页无法读取手机健康里的步数，只能用传感器在打开页面时估算：可以继续用「更新」手动填写今天的步数。';
+    var MSG_START = '已开始计步：只统计这个页面打开、手机在身上的这段时间，不会读取手机健康里的数据。';
+    var MSG_RESUME = '继续计步。';
+    var MSG_PAUSE = '已暂停计步，今天的累计数已经保存。';
+    var MSG_NO_DATA = '15 秒没有收到运动传感器数据：这台设备可能不提供网页传感器，网页无法读取手机健康里的步数，可以继续用「更新」手动填写今天的步数。';
+    var MSG_MANUAL = '步数已更新';
+    var MSG_TITLE = '计步';
+
+    /* 样式兜底（与 @CSS 段逐行一致：加载器已经注入过就不重复注入） */
+    var CSS_TEXT = [
+        '/* walk-styles */',
+        '/* walk：手机运动传感器计步（「你我之间」弹层里「我的步数」那一行的小按钮）。配色全部走主题变量，深色模式可用，无 emoji。 */',
+        '.together-row .walk-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid rgba(var(--accent-color-rgb), 0.45); border-radius: 999px; background: rgba(var(--accent-color-rgb), 0.12); color: var(--accent-color); font-family: var(--font-family); font-size: 11.5px; line-height: 1.4; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }',
+        '.together-row .walk-btn:active { transform: scale(0.96); }',
+        '.walk-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); opacity: 0.5; transition: opacity 0.2s, background 0.2s; }',
+        '.walk-counting { color: var(--accent-color); border-color: var(--accent-color); background: rgba(var(--accent-color-rgb), 0.2); }',
+        '.walk-counting .walk-dot { background: var(--accent-color); opacity: 1; animation: walk-pulse 1.6s ease-in-out infinite; }',
+        '.walk-paused { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }',
+        '.walk-paused .walk-dot { background: var(--text-secondary); opacity: 0.85; }',
+        '.walk-nodata { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }',
+        '.walk-nodata .walk-dot { background: var(--text-secondary); opacity: 0.4; animation: none; }',
+        '.walk-degraded { color: var(--text-secondary); border-color: var(--border-color); background: transparent; }',
+        '.walk-degraded .walk-dot { background: var(--text-secondary); opacity: 0.4; }',
+        '@keyframes walk-pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }',
+        'html[data-theme="dark"] .together-row .walk-btn { background: rgba(var(--accent-color-rgb), 0.16); }',
+        'html[data-theme="dark"] .walk-paused, html[data-theme="dark"] .walk-nodata, html[data-theme="dark"] .walk-degraded { background: transparent; }',
+        '@media (max-width: 360px) { .together-row .walk-btn { padding: 3px 7px; gap: 4px; font-size: 11px; } }'
+    ].join('\n');
+
+    /* 按钮结构（与 @HTML 段的 <template id="walkBtnTpl"> 内容一致；模板缺失时用这份兜底字符串/直接建节点） */
+    var BTN_HTML = '<button type="button" id="walkToggleBtn" class="together-edit walk-btn walk-idle" aria-pressed="false"><span class="walk-dot" id="walkDot"></span><span class="walk-btn-text" id="walkBtnText">' + T_IDLE + '</span></button>';
+
+    /* ================= 模块状态 ================= */
+    var started = false;          // initWalkFeature 幂等
+    var booting = false;
+    var bootTries = 0;
+    var bootTimer = null;
+    var btnBound = false;         // 按钮监听只绑一次
+    var legacyBound = false;      // 「更新」按钮拦截只绑一次
+    var listening = false;        // devicemotion 是否已挂上
+    var pending = false;          // 正在向系统申请权限
+    var status = 'idle';          // idle | counting | paused | degraded
+    var noData = false;           // 计步中但长时间没有传感器数据
+    var watchTimer = null;
+    var saveTimer = null;
+    var lastSaveAt = 0;
+    var mo = null;
+    var clock = null;             // 仅自检用：可替换时间源
+    var smooth = 0;               // 低通滤波后的动态加速度
+    var armed = true;             // 滞回：信号回落到 RELEASE_THRESHOLD 以下才重新武装
+    var lastStepAt = 0;
+    var lastEventAt = 0;
+    var countingSince = 0;
+
+    /* ================= 小工具 ================= */
+    function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+    function nowMs() { if (clock) { try { return clock(); } catch (e) {} } return Date.now(); }
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+    // 主程序的数据对象：优先用主程序自己暴露的实时访问器，其次同名闭包变量，最后 window.featureData
+    function fd() {
+        try { if (typeof window.featureDebug === 'function') { var a = window.featureDebug(); if (a && typeof a === 'object') return a; } } catch (e) {}
+        try { if (typeof featureData !== 'undefined' && featureData && typeof featureData === 'object') return featureData; } catch (e) {}
+        try { if (window.featureData && typeof window.featureData === 'object') return window.featureData; } catch (e) {}
+        try { var o = {}; window.featureData = o; return o; } catch (e) {}
+        return null;
+    }
+
+    function notify(msg, type) {
+        var t = type || 'info', ms = 4200;
+        try { if (typeof window.showNotification === 'function') { window.showNotification(msg, t, ms); return; } } catch (e) {}
+        try { if (typeof showNotification === 'function') { showNotification(msg, t, ms); return; } } catch (e) {}
+        try { if (typeof window.iosAlert === 'function') { window.iosAlert(msg, { title: MSG_TITLE, okText: '好' }); return; } } catch (e) {}
+        try { if (typeof iosAlert === 'function') { iosAlert(msg, { title: MSG_TITLE, okText: '好' }); } } catch (e) {}
+    }
+
+    function saveMain() {
+        try { if (typeof window.saveData === 'function') { window.saveData(); return true; } } catch (e) {}
+        try { if (typeof saveData === 'function') { saveData(); return true; } } catch (e) {}
+        return false;
+    }
+
+    // 步数变化很密：领先写一次，之后再按 SAVE_MIN_INTERVAL_MS 节流，避免高频落盘
+    function saveSoon() {
+        var t = Date.now();
+        if (t - lastSaveAt >= SAVE_MIN_INTERVAL_MS) { saveNow(); return; }
+        if (saveTimer !== null) return;
+        var wait = SAVE_MIN_INTERVAL_MS - (t - lastSaveAt);
+        saveTimer = setTimeout(function () { saveTimer = null; saveNow(); }, wait > 0 ? wait : 0);
+    }
+
+    function saveNow() {
+        if (saveTimer !== null) { try { clearTimeout(saveTimer); } catch (e) {} saveTimer = null; }
+        lastSaveAt = Date.now();
+        saveMain();
+    }
+
+    /* ================= 数据 ================= */
+    // featureData.walk = { date: 本地 YYYY-MM-DD, steps: 传感器当天累计, base: 开始计步时主字段里已有的值, lastWritten, updatedAt }
+    function walkState() {
+        var f = fd();
+        if (!f) return { date: '', steps: 0, base: 0, lastWritten: null, updatedAt: 0 };
+        var st = f[WALK_KEY];
+        if (!st || typeof st !== 'object') st = f[WALK_KEY] = {};
+        if (typeof st.steps !== 'number' || !isFinite(st.steps) || st.steps < 0) st.steps = 0;
+        if (typeof st.base !== 'number' || !isFinite(st.base) || st.base < 0) st.base = 0;
+        if (typeof st.date !== 'string') st.date = '';
+        st.steps = Math.round(st.steps);
+        st.base = Math.round(st.base);
+        return st;
+    }
+
+    // 主程序原来那套字段的形状兜底：正常情况下 togetherEnsureExtra() 已经建好了
+    function ensureMainShape(f) {
+        var d = f || fd();
+        if (!d) return null;
+        if (!d.status || typeof d.status !== 'object') d.status = {};
+        if (!d.status.mine || typeof d.status.mine !== 'object') d.status.mine = {};
+        var m = d.status.mine;
+        if (typeof m.steps !== 'number' || !isFinite(m.steps)) m.steps = 0;
+        return m;
+    }
+
+    function mainSteps() {
+        var m = ensureMainShape();
+        return m ? Math.max(0, Math.round(Number(m.steps) || 0)) : 0;
+    }
+
+    function total() {
+        var st = walkState();
+        return Math.max(0, Math.round((st.base || 0) + (st.steps || 0)));
+    }
+
+    // 把 base + steps 镜像进主程序原来的字段（主程序读这个字段渲染/落盘）
+    function mirror() {
+        var f = fd();
+        if (!f) return false;
+        var m = ensureMainShape(f);
+        if (!m) return false;
+        var st = walkState();
+        // 主程序 loadData() 会整体替换 featureData 对象：换过之后本模块当天状态还没建立，
+        // 这时不能写（否则会拿 0 覆盖刚读回来的真实步数），等 ensureDay() 先建立基线。
+        if (!st.date) return false;
+        var t = total();
+        if (m.steps !== t) m.steps = t;
+        st.lastWritten = t;
+        return true;
+    }
+
+    // 主字段被别处改过（典型：用户点「更新」手动填写）→ 以那个值为新的起点
+    function adoptExternal(cur) {
+        var st = walkState();
+        var n = Math.max(0, Math.round(Number(cur) || 0));
+        st.date = todayStr();
+        st.base = 0;
+        st.steps = n;
+        st.lastWritten = n;
+        st.updatedAt = Date.now();
+        smooth = 0; armed = true; lastStepAt = 0;                    // 数值被改写：滤波重新起步
+        refreshUi();
+        saveNow();
+    }
+
+    function pullExternal() {
+        var m = ensureMainShape();
+        if (!m) return;
+        var st = walkState();
+        var cur = Math.max(0, Math.round(Number(m.steps) || 0));
+        if (st.lastWritten === null || st.lastWritten === undefined) {
+            if (cur === total()) return;                              // 首装且值一致：不用动
+            adoptExternal(cur);
+            return;
+        }
+        if (cur === st.lastWritten) return;                            // 就是我们自己写进去的
+        adoptExternal(cur);
+    }
+
+    // 按日期归零：没有记录时以主字段已有值为基线（不抹掉用户已经手动填过的数），跨天则从 0 重新计
+    function ensureDay() {
+        var st = walkState();
+        var today = todayStr();
+        if (!st.date) {
+            st.date = today;
+            st.steps = 0;
+            st.base = mainSteps();
+            st.lastWritten = null;
+            st.updatedAt = Date.now();
+            mirror();
+            saveSoon();
+            return false;
+        }
+        if (st.date !== today) {
+            st.date = today;
+            st.steps = 0;
+            st.base = 0;
+            st.lastWritten = null;
+            st.updatedAt = Date.now();
+            smooth = 0; armed = true; lastStepAt = 0;
+            mirror();
+            saveSoon();
+            refreshUi();
+            return true;
+        }
+        return false;
+    }
+
+    /* ================= 计步算法 ================= */
+    function resetFilter() { smooth = 0; armed = true; lastStepAt = 0; }
+
+    function onMotion(e) {
+        if (!e) return;
+        var g = e.accelerationIncludingGravity || null;
+        var a = g || e.acceleration || null;
+        if (!a) return;
+        var x = num(a.x), y = num(a.y), z = num(a.z);
+        if (x === null || y === null || z === null) return;
+
+        var t = nowMs();
+        var gap = lastEventAt ? (t - lastEventAt) : 0;
+        lastEventAt = t;
+        if (noData) { noData = false; refreshUi(); }                   // 数据回来了：撤掉「未检测到传感器」
+        if (gap > RESET_GAP_MS) resetFilter();
+
+        // 有些浏览器会直接给全 0（等于「没有有效数据」）：这种样本只让滤波回落、不参与判峰
+        var valid = !(x === 0 && y === 0 && z === 0);
+        var mag = valid ? Math.sqrt(x * x + y * y + z * z) : 0;        // 合加速度模长
+        var dyn = valid ? (g ? (mag - GRAVITY) : mag) : 0;             // acceleration 已经扣过重力
+        if (!isFinite(dyn)) return;
+
+        smooth = smooth + LPF_ALPHA * (dyn - smooth);                  // 低通滤波（EMA）
+        if (!armed) { if (smooth < RELEASE_THRESHOLD) armed = true; return; }
+        if (valid && smooth > PEAK_THRESHOLD) {
+            if (lastStepAt && (t - lastStepAt) < MIN_STEP_INTERVAL_MS) { armed = false; return; }   // 去抖：太密的波峰丢掉
+            armed = false;
+            lastStepAt = t;
+            addStep();
+        }
+    }
+
+    function addStep() {
+        if (!walkState().date) ensureDay();                             // 主程序刚换过 featureData 对象时，先按当天重建基线
+        var st = walkState();
+        st.steps += 1;
+        st.updatedAt = Date.now();
+        mirror();
+        refreshUi();
+        saveSoon();
+    }
+
+    /* ================= 传感器生命周期 ================= */
+    function attach(msg) {
+        ensureDay();
+        pullExternal();
+        mirror();
+        if (!listening) {
+            try { window.addEventListener('devicemotion', onMotion, false); listening = true; } catch (e) { listening = false; }
+        }
+        try { window.__stepBound = true; } catch (e) {}                 // 让主程序那套旧计步不再另挂监听
+        status = 'counting';
+        pending = false;
+        noData = false;
+        resetFilter();
+        countingSince = nowMs();
+        lastEventAt = 0;
+        startWatch();
+        refreshUi();
+        if (msg) notify(msg, 'info');
+    }
+
+    function detach() {
+        if (listening) {
+            try { window.removeEventListener('devicemotion', onMotion, false); } catch (e) {}
+            listening = false;
+        }
+        stopWatch();
+    }
+
+    function startWatch() {
+        if (watchTimer !== null) return;
+        watchTimer = setInterval(checkSensor, SENSOR_CHECK_MS);
+    }
+
+    function stopWatch() {
+        if (watchTimer !== null) { try { clearInterval(watchTimer); } catch (e) {} watchTimer = null; }
+    }
+
+    function checkSensor() {
+        if (status !== 'counting') return;
+        pullExternal();
+        mirror();
+        saveSoon();
+        var since = lastEventAt || countingSince;
+        if (since && (nowMs() - since) >= SENSOR_TIMEOUT_MS) {
+            if (!noData) { noData = true; refreshUi(); notify(MSG_NO_DATA, 'warning'); }
+        } else if (noData) { noData = false; refreshUi(); }
+    }
+
+    function start() {                                                  // 用户手势里调用：申请权限 → 挂监听
+        var DM = window.DeviceMotionEvent;
+        if (!DM) { degrade(MSG_NO_DM); return; }
+        var begin = function () { attach(MSG_START); };
+        if (typeof DM.requestPermission === 'function') {
+            if (pending) return;
+            pending = true;
+            var p;
+            try { p = DM.requestPermission(); } catch (e) { pending = false; degrade(MSG_FAIL); return; }
+            if (!p || typeof p.then !== 'function') { pending = false; degrade(MSG_FAIL); return; }
+            p.then(function (r) {
+                if (r === 'granted') begin();
+                else { pending = false; degrade(MSG_DENIED); }
+            }, function () { pending = false; degrade(MSG_DENIED); });
+            return;
+        }
+        begin();
+    }
+
+    function pause(silent) {
+        detach();
+        status = 'paused';
+        noData = false;
+        pending = false;
+        mirror();
+        saveNow();
+        refreshUi();
+        if (!silent) notify(MSG_PAUSE, 'info');
+    }
+
+    function resume() {
+        if (!window.DeviceMotionEvent) { degrade(MSG_NO_DM); return; }
+        attach(MSG_RESUME);
+    }
+
+    function toggle() {
+        if (status === 'counting') { pause(); return; }
+        if (status === 'paused') { resume(); return; }
+        start();                                                        // idle / degraded（degraded 再点一次＝重试）
+    }
+
+    // 降级：传感器用不了也要能用 —— 中文说清楚 + 手动填写照旧可用
+    function degrade(msg) {
+        detach();
+        status = 'degraded';
+        noData = false;
+        pending = false;
+        refreshUi();
+        notify(msg || MSG_FAIL, 'warning');
+    }
+
+    /* ================= 界面 ================= */
+    function modalVisible() {
+        var m = document.getElementById(MODAL_ID);
+        if (!m) return false;
+        try { if (m.style && m.style.display === 'none') return false; } catch (e) {}
+        try {
+            var cs = window.getComputedStyle ? window.getComputedStyle(m) : null;
+            if (cs && cs.display === 'none') return false;
+            if (cs && cs.visibility === 'hidden') return false;
+        } catch (e) {}
+        return true;
+    }
+
+    function ensureCss() {
+        if (document.getElementById(CSS_ID)) return;
+        if (document.querySelector) { try { if (document.querySelector('style[data-walk="' + CSS_MARK + '"]')) return; } catch (e) {} }
+        var host = document.head || (document.getElementsByTagName ? document.getElementsByTagName('head')[0] : null) || document.body;
+        if (!host || typeof host.appendChild !== 'function') return;
+        var s = document.createElement('style');
+        s.id = CSS_ID;
+        s.setAttribute('data-walk', CSS_MARK);
+        s.textContent = CSS_TEXT;
+        host.appendChild(s);
+    }
+
+    function buildButton() {
+        var tpl = document.getElementById(TPL_ID);
+        try {
+            if (tpl && tpl.content && tpl.content.firstElementChild && typeof tpl.content.firstElementChild.cloneNode === 'function') {
+                return tpl.content.firstElementChild.cloneNode(true);
+            }
+        } catch (e) {}
+        var btn = document.createElement('button');                     // 模板缺失：直接建节点（不依赖 innerHTML 解析）
+        btn.type = 'button';
+        btn.id = BTN_ID;
+        btn.className = 'together-edit walk-btn walk-idle';
+        btn.setAttribute('aria-pressed', 'false');
+        var dot = document.createElement('span');
+        dot.className = 'walk-dot';
+        dot.id = DOT_ID;
+        var txt = document.createElement('span');
+        txt.className = 'walk-btn-text';
+        txt.id = TEXT_ID;
+        txt.textContent = T_IDLE;
+        btn.appendChild(dot);
+        btn.appendChild(txt);
+        return btn;
+    }
+
+    function ensureButton() {
+        if (document.getElementById(BTN_ID)) { bindButton(); return; }
+        var anchor = document.getElementById(STEPS_ID);
+        var row = anchor && anchor.parentNode;
+        if (!anchor || !row || typeof row.insertBefore !== 'function') return;
+        var btn = buildButton();
+        if (!btn) return;
+        try { row.insertBefore(btn, anchor.nextSibling); }
+        catch (e) { try { row.appendChild(btn); } catch (e2) { return; } }
+        bindButton();
+    }
+
+    function bindButton() {
+        if (btnBound) return;
+        var btn = document.getElementById(BTN_ID);
+        if (!btn || typeof btn.addEventListener !== 'function') return;
+        btn.addEventListener('click', function (e) {
+            try { if (e && e.preventDefault) e.preventDefault(); } catch (err) {}
+            toggle();
+        }, false);
+        btnBound = true;
+    }
+
+    // 主程序「更新」按钮：捕获阶段拦下它自己那套旧计步，改走原来的手动填写路径
+    function takeoverLegacy() {
+        if (!TAKEOVER_LEGACY_BTN || legacyBound) return;
+        var btn = document.getElementById(LEGACY_BTN_ID);
+        var row = btn && btn.parentNode;
+        if (!row || typeof row.addEventListener !== 'function') return;
+        row.addEventListener('click', function (e) {
+            var n = e && e.target;
+            var hit = false;
+            while (n && n !== row) { if (n.id === LEGACY_BTN_ID) { hit = true; break; } n = n.parentNode; }
+            if (!hit) return;
+            try { if (e.stopPropagation) e.stopPropagation(); } catch (err) {}
+            try { if (e.preventDefault) e.preventDefault(); } catch (err) {}
+            manualPrompt();
+        }, true);
+        legacyBound = true;
+    }
+
+    // 原「更新」按钮的手动填写（与主程序原来那段完全同路：iosPrompt → 写字段 → saveData）
+    function manualPrompt() {
+        var cur = mainSteps();
+        var p = null;
+        try { if (typeof window.iosPrompt === 'function') p = window.iosPrompt('今天的步数', { title: '更新步数', value: String(cur), placeholder: '例如 6823' }); } catch (e) {}
+        if (!p && typeof iosPrompt === 'function') { try { p = iosPrompt('今天的步数', { title: '更新步数', value: String(cur), placeholder: '例如 6823' }); } catch (e) {} }
+        if (!p || typeof p.then !== 'function') return;
+        p.then(function (v) {
+            if (v === null || v === undefined) return;
+            var n = Math.max(0, Math.round(Number(v) || 0));
+            var m = ensureMainShape();
+            if (m) m.steps = n;
+            var st = walkState();                                       // 手动值成为计步模块的新起点
+            st.base = 0;
+            st.steps = n;
+            st.lastWritten = n;
+            st.date = todayStr();
+            st.updatedAt = Date.now();
+            smooth = 0; armed = true; lastStepAt = 0;
+            saveNow();
+            refreshUi();
+            notify(MSG_MANUAL, 'success');
+        });
+    }
+
+    function applyStatus() {
+        var btn = document.getElementById(BTN_ID);
+        if (!btn) return;
+        var txt = T_IDLE;
+        if (status === 'degraded') txt = T_DEGRADED;
+        else if (status === 'counting') txt = noData ? T_NO_DATA : T_COUNTING;
+        else if (status === 'paused') txt = T_PAUSED;
+        var cls = 'together-edit walk-btn walk-' + status + (noData ? ' walk-nodata' : '');
+        if (btn.className !== cls) btn.className = cls;
+        try { btn.setAttribute('aria-pressed', status === 'counting' ? 'true' : 'false'); } catch (e) {}
+        var t = document.getElementById(TEXT_ID);
+        if (t) { if (t.textContent !== txt) t.textContent = txt; }
+        else if (btn.textContent !== txt) btn.textContent = txt;
+    }
+
+    function renderSteps() {
+        var el = document.getElementById(STEPS_ID);
+        if (!el) return;
+        var txt = total() + ' 步';
+        if (el.textContent !== txt) el.textContent = txt;                // 只在步数变化时写 DOM
+    }
+
+    // 只在「你我之间」弹层可见时碰 DOM
+    function refreshUi() {
+        if (!modalVisible()) return;
+        ensureButton();
+        renderSteps();
+        applyStatus();
+    }
+
+    function watchModal() {
+        if (mo || typeof MutationObserver !== 'function') return;
+        var modal = document.getElementById(MODAL_ID);
+        if (!modal) return;
+        try {
+            mo = new MutationObserver(function () { refreshUi(); });
+            mo.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
+        } catch (e) { mo = null; }
+    }
+
+    /* ================= 初始化（幂等） ================= */
+    function initWalkFeature() {
+        try {
+            if (started || booting) return started;
+            booting = true;
+            if (!document.getElementById(STEPS_ID) && bootTries < 40) {   // 最多等 ~14 秒，之后再靠弹层打开时补
+                bootTries++;
+                if (bootTimer === null) {
+                    bootTimer = setTimeout(function () { bootTimer = null; booting = false; initWalkFeature(); }, 350);
+                }
+                return false;
+            }
+            booting = false;
+            if (bootTimer !== null) { try { clearTimeout(bootTimer); } catch (e) {} bootTimer = null; }
+
+            ensureCss();
+            ensureButton();
+            takeoverLegacy();
+            watchModal();
+            try { window.__stepBound = true; } catch (e) {}               // 关闭主程序那套旧计步监听
+            ensureDay();
+            mirror();
+            if (document.addEventListener) {
+                document.addEventListener('visibilitychange', function () {
+                    if (document.hidden) { try { saveNow(); } catch (e) {} }
+                    else refreshUi();
+                }, false);
+            }
+            window.addEventListener('pagehide', function () { try { saveNow(); } catch (e) {} }, false);
+            started = true;
+            refreshUi();                                                  // 弹层不可见就不渲染，等它打开时由 MutationObserver 补
+            return true;
+        } catch (e) {
+            booting = false;
+            return false;
+        }
+    }
+
+    /* ================= 对外接口 ================= */
+    window.walkModule = {
+        version: '1.0.0',
+        KEY: WALK_KEY,
+        TEXTS: {
+            IDLE: T_IDLE, COUNTING: T_COUNTING, PAUSED: T_PAUSED, NO_DATA: T_NO_DATA, DEGRADED: T_DEGRADED,
+            NO_DM: MSG_NO_DM, DENIED: MSG_DENIED, FAIL: MSG_FAIL, START: MSG_START, RESUME: MSG_RESUME,
+            PAUSE: MSG_PAUSE, SENSOR_LOST: MSG_NO_DATA, MANUAL: MSG_MANUAL
+        },
+        PARAMS: {
+            GRAVITY: GRAVITY, LPF_ALPHA: LPF_ALPHA, PEAK_THRESHOLD: PEAK_THRESHOLD,
+            RELEASE_THRESHOLD: RELEASE_THRESHOLD, MIN_STEP_INTERVAL_MS: MIN_STEP_INTERVAL_MS,
+            RESET_GAP_MS: RESET_GAP_MS, SENSOR_TIMEOUT_MS: SENSOR_TIMEOUT_MS,
+            SENSOR_CHECK_MS: SENSOR_CHECK_MS, SAVE_MIN_INTERVAL_MS: SAVE_MIN_INTERVAL_MS,
+            TAKEOVER_LEGACY_BTN: TAKEOVER_LEGACY_BTN
+        },
+        start: initWalkFeature,
+        state: walkState,
+        total: total,
+        steps: function () { return walkState().steps; },
+        status: function () {
+            return { status: status, listening: listening, noData: noData, legacyTakeover: legacyBound,
+                buttonBound: btnBound, pending: pending, started: started };
+        },
+        toggle: toggle,
+        startCounting: start,
+        pause: pause,
+        resume: resume,
+        rollDay: ensureDay,
+        checkSensor: checkSensor,
+        refreshUi: refreshUi,
+        manualPrompt: manualPrompt,
+        setClock: function (fn) { clock = (typeof fn === 'function') ? fn : null; },
+        internals: { cssText: CSS_TEXT, btnHtml: BTN_HTML, cssId: CSS_ID, cssMark: CSS_MARK, tplId: TPL_ID },
+        debug: function () {
+            return { started: started, status: status, listening: listening, noData: noData, pending: pending,
+                legacyTakeover: legacyBound, buttonBound: btnBound, smooth: smooth, armed: armed,
+                lastStepAt: lastStepAt, lastEventAt: lastEventAt, clock: !!clock, walk: walkState(), total: total() };
+        }
+    };
+    window.initWalkFeature = initWalkFeature;
+
+    // 自动延迟启动（加载器显式调用 window.initWalkFeature() 走同一条幂等路径）
+    try {
+        var boot = function () { setTimeout(function () { try { initWalkFeature(); } catch (e) {} }, 60); };
+        if (document.readyState === 'loading' && typeof document.addEventListener === 'function') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+    } catch (e) {}
+})();
+
+})();
 /* ===== 功能模块：shop3save ===== */
 /* ===== 商城「保存商品」直接落库兜底（shop3 表单） ===== */
 (function () {
