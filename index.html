@@ -7208,6 +7208,14 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .sticker-grid-item { cursor: pointer; }
         .sticker-grid-item.tap-again { outline: 2px solid var(--accent-color); outline-offset: -2px; }
 
+        /* ===== 代付 / 送礼 卡片：加高一些，更舒展 ===== */
+        .pay2-card { min-height: 148px !important; padding-top: 14px !important; padding-bottom: 8px !important; }
+        .pay2-card .pay2-card-title { margin-bottom: 12px !important; }
+        .pay2-card .pay2-card-body { padding: 14px 0 !important; }
+        .pay2-card .pay2-card-icon { width: 62px !important; height: 62px !important; }
+        .pay2-card .pay2-card-foot { margin-top: 14px !important; }
+        .pay2-card .pay2-card-tag { margin-top: 10px !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -13033,6 +13041,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                     const txt = String(v).trim().slice(0, 20);
                     featureData.status.mine.text = txt || '在线';
                     featureData.status.mine.emoji = '';   // 自定义状态不加任何 emoji
+                    try { settings.myStatus = featureData.status.mine.text; } catch (e) {}   // 同步旧字段，避免被去 emoji 轮询覆盖回去
                     saveData();
                     try { statusRender(); } catch (e) {}
                     try { togetherRender(); } catch (e) {}
@@ -17729,7 +17738,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             var pSpan = document.querySelector('#partnerStatus span');
             if (pSpan) { var pv = strip(s.partnerStatus || pSpan.textContent); if (pv && pSpan.textContent !== pv) pSpan.textContent = pv; }
             var mSpan = document.getElementById('myStatusText');
-            if (mSpan) { var mv = strip(s.myStatus || mSpan.textContent); if (mv && mSpan.textContent !== mv) mSpan.textContent = mv; }
+            var _fdMine = (fd.status && fd.status.mine && fd.status.mine.text) ? fd.status.mine.text : '';
+            if (mSpan) { var mv = strip(_fdMine || s.myStatus || mSpan.textContent); if (mv && mSpan.textContent !== mv) mSpan.textContent = mv; }
         } catch (e) {}
     }
     function gear() {
