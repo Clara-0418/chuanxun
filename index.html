@@ -14016,6 +14016,59 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：shop3save ===== */
+/* ===== 商城「保存商品」直接落库兜底（shop3 表单） ===== */
+(function () {
+    function listOf() {
+        var fd = window.featureData;
+        if (!fd) return null;
+        var shop = fd.shop || (fd.shop = {});
+        if (!Array.isArray(shop.products)) shop.products = [];
+        return shop.products;
+    }
+    function hasName(list, name) {
+        for (var i = 0; i < list.length; i++) { if (list[i] && String(list[i].name || '') === name) return true; }
+        return false;
+    }
+    function saveDirect() {
+        try {
+            var list = listOf();
+            if (!list) return false;
+            var nameEl = document.getElementById('shop3AddName');
+            var name = nameEl ? String(nameEl.value || '').trim() : '';
+            if (!name) { try { window.showNotification('请先填写商品名称', 'warning', 2000); } catch (e) {} return false; }
+            if (hasName(list, name)) return false;
+            var price = Number(((document.getElementById('shop3AddPrice') || {}).value) || 0);
+            if (!isFinite(price) || price < 0) price = 0;
+            var icon = String(((document.getElementById('shop3AddIcon') || {}).value) || '').trim() || '🎁';
+            var catEl = document.getElementById('shop3AddCat');
+            var cat = catEl && catEl.value ? String(catEl.value) : '推荐';
+            list.push({
+                id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                name: name, price: price, icon: icon, cat: cat, custom: true, createdAt: Date.now()
+            });
+            try { if (typeof window.saveData === 'function') window.saveData(); } catch (e) {}
+            try { if (window.shop2Internal && typeof window.shop2Internal.render === 'function') window.shop2Internal.render(); } catch (e) {}
+            try { window.showNotification('商品已上架', 'success', 2200); } catch (e) {}
+            if (nameEl) nameEl.value = '';
+            return true;
+        } catch (e) { return false; }
+    }
+    document.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('[data-shop3-act="save"]') : null;
+        if (!b) return;
+        setTimeout(function () {
+            try {
+                var nameEl = document.getElementById('shop3AddName');
+                var name = nameEl ? String(nameEl.value || '').trim() : '';
+                if (!name) return;                    // 原路径已成功（它会把输入框清空）
+                var list = listOf();
+                if (!list || hasName(list, name)) return;
+                saveDirect();
+            } catch (err) {}
+        }, 700);
+    }, true);
+})();
 /* ===== 功能模块：shop3（独立作用域） ===== */
 (function(){
 
