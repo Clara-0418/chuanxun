@@ -16132,7 +16132,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     // 查看回复：原梦角的点评发送能力只能针对「你买了什么」；这里先以自己的身份问一句，再让梦角点评一条
     function viewReply(rec) {
         if (typeof window.addMessage === 'function') {
-            try { window.addMessage({ sender: myName(), text: '我买的「' + rec.name + '」你看到了吗？' }); } catch (err) {}
+            /* 按用户要求：不再发送「我买的「X」你看到了吗？」这条消息 */
         }
         const si = internal();
         if (si && typeof si.pickComment === 'function' && typeof window.addMessage === 'function') {
@@ -24854,7 +24854,7 @@ function initMusicFeature() {
         const one = { id: item.id, name: text(item.name, 24) || '商品', price: normPrice(item.price), qty: qty,
             icon: text(item.icon, 4) || catOf(item.cat).icon, cat: catOf(item.cat).id };
         const kind = (mode === 'gift') ? 'gift' : (mode === 'partner' ? 'partner' : 'self');
-        if (!opt.silent && kind !== 'gift') shopSendPurchaseMsg(shopSysMsg(one.name, kind, qty), shopSysSender(kind), one);   // 按用户要求：赠送商品不发消息（礼物照旧进礼物柜）
+        if (!opt.silent) shopSendPurchaseMsg(shopSysMsg(one.name, kind, qty), shopSysSender(kind), one);
         if (kind === 'gift') {
             shopAddOrder(one, 'user', PARTNER_ID);
             shopAddGift({ name: one.name, from: 'user', to: PARTNER_ID, price: one.price, icon: one.icon });
