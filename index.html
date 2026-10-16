@@ -12642,29 +12642,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 document.getElementById('closeBgSettings').addEventListener('click', () => hideModal(document
                     .getElementById('bgSettingsModal')));
 
-                document.getElementById('myStatusContainer').addEventListener('click', () => {
-                    const current = myStatusText.textContent;
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.value = current;
-                    input.style.cssText =
-                        'background:transparent;border:1px solid var(--accent-color);border-radius:4px;color:var(--text-primary);font-size:10px;padding:2px 6px;width:60px;text-align:center;outline:none;';
-                    const container = document.getElementById('myStatusContainer');
-                    container.innerHTML = '';
-                    container.appendChild(input);
-                    input.focus();
-                    input.select();
-                    const save = () => { const val = input.value.trim() || '在线';
-                        settings.myStatus = val;
-                        myStatusText.textContent = val;
-                        container.innerHTML = '';
-                        container.appendChild(myStatusText);
-                        saveData(); };
-                    input.addEventListener('blur', save);
-                    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); if (e
-                            .key === 'Escape') { container.innerHTML = '';
-                            container.appendChild(myStatusText); } });
-                });
+                /* 旧的「把胶囊换成小输入框」处理已移除：它和我加的 iosPrompt 同时触发会互相打架，导致状态改不了 */
                 partnerAvatar.addEventListener('click', () => editAvatar('partner'));
                 myAvatar.addEventListener('click', () => editAvatar('me'));
                 partnerName.addEventListener('click', () => editName('partner'));
