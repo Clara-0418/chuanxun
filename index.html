@@ -24854,7 +24854,7 @@ function initMusicFeature() {
         const one = { id: item.id, name: text(item.name, 24) || '商品', price: normPrice(item.price), qty: qty,
             icon: text(item.icon, 4) || catOf(item.cat).icon, cat: catOf(item.cat).id };
         const kind = (mode === 'gift') ? 'gift' : (mode === 'partner' ? 'partner' : 'self');
-        if (!opt.silent) shopSendPurchaseMsg(shopSysMsg(one.name, kind, qty), shopSysSender(kind), one);
+        if (!opt.silent && kind !== 'gift') shopSendPurchaseMsg(shopSysMsg(one.name, kind, qty), shopSysSender(kind), one);   // 按用户要求：赠送商品不发消息（礼物照旧进礼物柜）
         if (kind === 'gift') {
             shopAddOrder(one, 'user', PARTNER_ID);
             shopAddGift({ name: one.name, from: 'user', to: PARTNER_ID, price: one.price, icon: one.icon });
