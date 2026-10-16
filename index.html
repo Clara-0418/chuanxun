@@ -4796,6 +4796,34 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：spec ===== */
+/* ===== 功能模块：spec（商品规格按属性 / 分类渲染；独立作用域，不碰其它模块） =====
+ * id / class 前缀统一 spec：.spec-wrap / .spec-fld / .spec-fld-name / .spec-opts / .spec-opt
+ * 配色只走主文件主题变量（--text-primary / --text-secondary / --border-color / --accent-color /
+ * --primary-bg），深浅色模式跟随主题；不带 emoji 文案。 */
+#shop2SheetBody.spec-hide-native-size .shop2-fld:has(> #shop2Sizes) { display: none; }
+.spec-wrap { margin-top: 14px; }
+.spec-fld { margin-top: 10px; }
+.spec-fld:first-child { margin-top: 0; }
+.spec-fld-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+.spec-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.spec-opt {
+    padding: 7px 12px; font-size: 12px; line-height: 1.2; white-space: nowrap;
+    border: 1px solid var(--border-color); border-radius: 10px;
+    background: var(--primary-bg, transparent); color: var(--text-primary);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.spec-opt:active { opacity: .82; }
+.spec-opt.spec-active {
+    border-color: var(--accent-color); color: var(--accent-color);
+    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+    font-weight: 600;
+}
+/* 兜底：不支持 :has() 时，用本模块自带的类隐藏原写死的「尺码」行（只加类，不删 DOM） */
+#shop2SheetBody.spec-hide-native-size .spec-native-hidden { display: none; }
+
+
 /* ===== 功能模块：walk ===== */
 /* walk-styles */
 /* walk：手机运动传感器计步（「你我之间」弹层里「我的步数」那一行的小按钮）。配色全部走主题变量，深色模式可用，无 emoji。 */
@@ -7488,6 +7516,11 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：spec ===== -->
+<!-- 商品规格：由 spec 模块按「商品自带 specs → 分类模版 → 通用模版」动态填充，这里只留骨架 -->
+<div class="spec-wrap" id="specFields" data-spec-wrap="1"></div>
+
+
 <!-- ===== 功能模块：walk ===== -->
 <template id="walkBtnTpl"><button type="button" id="walkToggleBtn" class="together-edit walk-btn walk-idle" aria-pressed="false"><span class="walk-dot" id="walkDot"></span><span class="walk-btn-text" id="walkBtnText">开始计步</span></button></template>
 
@@ -13384,7 +13417,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14038,6 +14071,618 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：spec（独立作用域） ===== */
+(function(){
+
+/* ===== 功能模块：spec（按商品属性 / 分类显示各自规格） =====
+ * 目标（只做规格，视觉与其它逻辑一律不碰）：
+ *   1. 分类 → 规格模版（名称 + 选项）常量表，可读好加；商品自带 specs 优先；未知分类走通用模版。
+ *   2. 商品详情 sheet 动态渲染：每个属性一行（名称 + 选项按钮），默认选中第一项，选中项高亮。
+ *   3. 下单 / 加购 / 代付 / 预订都带上选中的规格：原实现只认单一字符串，所以多属性拼成
+ *      「属性名:选项」用 ' / ' 连接，例如「甜度:五分糖 / 温度:去冰」。
+ *   4. 购物车 / 订单行显示该商品自己的规格（靠 DOM 补丁，不改 shop2 / shop3 / pay2 模块，
+ *      不改 featureData 结构、不新增数据键：规格只存在本模块的界面层 map 里）。
+ *   5. 既有 shop2 / shop3 / pay2 一行不改：全部靠 DOM 观察 + 捕获阶段事件委托 + 原接口包装实现。
+ * 对外：window.initSpecFeature()（幂等）/ window.specFeatureInternal（调试与自检）
+ */
+(function(){
+'use strict';
+
+var w = window;
+
+// ---------------- 分类 → 规格模版（常量表，key 用类目 id，方便以后加） ----------------
+// cloth 保留原商城用的 均码/S/M/L/XL 作为该类默认（不丢原有选项）；鞋用 36-37/38-39/40-41/42-43；
+// 饮品/外卖两个属性（甜度 + 温度）；配饰是中性色名，不绑定某个商品。
+var SPEC_TEMPLATES = {
+    cloth:     [{ name: '尺码', options: ['均码', 'S', 'M', 'L', 'XL'] }],
+    clothing:  [{ name: '尺码', options: ['S', 'M', 'L', 'XL', 'XXL'] }],
+    shoes:     [{ name: '尺码', options: ['36-37', '38-39', '40-41', '42-43'] }],
+    drink:     [{ name: '甜度', options: ['无糖', '三分糖', '五分糖', '七分糖', '全糖'] },
+                { name: '温度', options: ['常温', '少冰', '去冰', '热'] }],
+    food:      [{ name: '口味', options: ['原味', '微辣', '中辣', '特辣'] }],
+    snack:     [{ name: '口味', options: ['原味', '甜味', '咸味', '微辣'] }],
+    book:      [{ name: '版本', options: ['平装', '精装', '典藏版'] }],
+    accessory: [{ name: '颜色', options: ['暖白', '雾蓝', '浅粉', '米杏'] }],
+    jewel:     [{ name: '尺寸', options: ['均码', 'S', 'M', 'L', '定制'] },
+                { name: '刻字', options: ['不刻字', '刻名字', '刻纪念日'] }],
+    digital:   [{ name: '规格', options: ['标准版', '升级版'] },
+                { name: '颜色', options: ['深空灰', '银白'] }],
+    home:      [{ name: '规格', options: ['单件', '两只装', '礼盒装'] }],
+    flower:    [{ name: '规格', options: ['单支', '小束', '大束', '礼盒装'] }],
+    virtual:   [{ name: '规格', options: ['默认'] }],
+    other:     [{ name: '规格', options: ['默认', '加急', '礼盒装'] }]
+};
+
+// 类目 id 的同义词 / 别名 → 模版 key（自定义类目名或别的版本也能落到同一套）
+var SPEC_CAT_ALIAS = {
+    cloth: 'cloth', clothing: 'cloth', clothes: 'cloth', apparel: 'cloth', costume: 'cloth',
+    '服饰': 'cloth', '服装': 'cloth', '衣物': 'cloth', '衣服': 'cloth',
+    shoes: 'shoes', shoe: 'shoes', footwear: 'shoes', '鞋': 'shoes', '鞋子': 'shoes', '鞋靴': 'shoes',
+    drink: 'drink', drinks: 'drink', beverage: 'drink', milktea: 'drink', tea: 'drink',
+    coffee: 'drink', takeout: 'drink', '饮品': 'drink', '奶茶': 'drink', '外卖': 'drink', '饮料': 'drink',
+    food: 'food', meal: 'food', '食品': 'food', '食物': 'food', '正餐': 'food',
+    snack: 'snack', snacks: 'snack', dessert: 'snack', '零食': 'snack', '甜点': 'snack',
+    book: 'book', books: 'book', reading: 'book', '书籍': 'book', '图书': 'book',
+    accessory: 'accessory', accessary: 'accessory', '配饰': 'accessory', '饰品': 'accessory',
+    jewel: 'jewel', jewelry: 'jewel', jewellery: 'jewel', '首饰': 'jewel', '珠宝': 'jewel',
+    digital: 'digital', electronics: 'digital', gadget: 'digital', '数码': 'digital', '电子': 'digital',
+    home: 'home', house: 'home', '家居': 'home', '家用': 'home',
+    flower: 'flower', flowers: 'flower', bouquet: 'flower', '花': 'flower', '鲜花': 'flower',
+    virtual: 'virtual', virtualgift: 'virtual', '虚拟礼物': 'virtual', '虚拟': 'virtual',
+    other: 'other', misc: 'other', '其它': 'other', '其他': 'other'
+};
+
+// 商品名兜底：类目给不出线索时按名字关键词判（数组顺序 = 优先级）
+var SPEC_NAME_HINTS = [
+    { key: 'shoes', words: ['鞋', '靴', '球鞋', '帆布鞋', '高跟鞋', '拖鞋'] },
+    { key: 'drink', words: ['奶茶', '咖啡', '拿铁', '果汁', '可乐', '气泡水', '饮料', '外卖'] },
+    { key: 'book', words: ['书', '文集', '诗集', '小说', '画册'] },
+    { key: 'food', words: ['套餐', '火锅', '便当', '蛋糕', '甜品', '外卖'] },
+    { key: 'snack', words: ['薯片', '巧克力', '坚果', '零食', '曲奇'] },
+    { key: 'cloth', words: ['围巾', '衣服', '外套', '毛衣', '衬衫', '裙', '裤', '袜'] },
+    { key: 'accessory', words: ['项链', '手链', '耳环', '手镯', '发夹'] },
+    { key: 'flower', words: ['花', '桔梗', '向日葵', '玫瑰'] }
+];
+
+var SPEC_DEFAULT_OPTIONS = ['默认', '加急', '礼盒装'];   // 连通用模版都拿不到时的最后兜底
+var SPEC_NATIVE_ATTR = 'specNativeHidden';               // 标记被本模块隐藏的原尺码行（便于还原）
+
+var specReady = false, specWrapped = false, specTimer = null, specCtxProductId = null;
+
+// 界面层状态：key 一律是「原数据本来就有的 id」，只存字符串，不写进任何 featureData 键
+var specSelMap = {};    // 商品 id → 详情里当前选中的属性值 { 属性名: 选项 }
+var specCartMap = {};   // 商品 id → 加入购物车时带的规格字符串
+var specOrderMap = {};  // 订单 id / 商品 id → 下单时带的规格字符串
+
+// ---------------- 小工具（不依赖主文件内部函数） ----------------
+function specStr(v) { return String(v === null || v === undefined ? '' : v); }
+function specTxt(v, max) {
+    var s = specStr(v).replace(/\s+/g, ' ').trim();
+    return max ? s.slice(0, max) : s;
+}
+function specById(id) {
+    try { return document.getElementById(id); } catch (e) { return null; }
+}
+function specQ(el, sel) {
+    try { return (el && el.querySelector) ? el.querySelector(sel) : null; } catch (e) { return null; }
+}
+function specQa(el, sel) {
+    try {
+        var n = (el && el.querySelectorAll) ? el.querySelectorAll(sel) : null;
+        return n ? Array.prototype.slice.call(n) : [];
+    } catch (e) { return []; }
+}
+function specEsc(v) {
+    if (typeof w.escapeHtml === 'function') { try { return w.escapeHtml(v); } catch (e) {} }
+    return specStr(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function specCssEsc(v) {
+    try { if (w.CSS && typeof w.CSS.escape === 'function') return w.CSS.escape(v); } catch (e) {}
+    return specStr(v).replace(/["\\]/g, '\\$&');
+}
+
+// ---------------- 数据读取（只读，不写任何键） ----------------
+function specShop() {
+    var f = null;
+    try { f = w.featureData; } catch (e) {}
+    if (!f || typeof f !== 'object') return null;
+    var s = null;
+    try { s = f.shop; } catch (e) {}
+    return (s && typeof s === 'object' && !Array.isArray(s)) ? s : null;
+}
+function specProducts() {
+    var s = specShop();
+    return (s && Array.isArray(s.products)) ? s.products : [];
+}
+function specCartRaw() {
+    var s = specShop();
+    return (s && Array.isArray(s.cart)) ? s.cart : [];
+}
+// 原商品自带的规格：shop3 的「添加商品」表单写的就是 [{ name, options }]
+function specProductSpecs(id) {
+    var out = [], list = specProducts(), raw = null, found = false;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && typeof list[i] === 'object' && specStr(list[i].id) === specStr(id)) {
+            raw = list[i].specs;
+            found = true;
+            break;
+        }
+    }
+    if (!found || !Array.isArray(raw)) return out;
+    for (var j = 0; j < raw.length; j++) {
+        var r = raw[j];
+        if (!r) continue;
+        if (typeof r === 'string') {                        // 容错：直接存字符串的情况
+            var one = specTxt(r, 16);
+            if (one) out.push({ name: '', options: [one] });
+            continue;
+        }
+        if (typeof r !== 'object') continue;
+        var nm = specTxt(r.name, 16);
+        var src = Array.isArray(r.options) ? r.options : (Array.isArray(r.opts) ? r.opts : []);
+        var opts = [];
+        for (var k = 0; k < src.length; k++) {
+            var o = specTxt((src[k] && typeof src[k] === 'object') ? src[k].name : src[k], 16);
+            if (o && opts.indexOf(o) < 0) opts.push(o);
+        }
+        if (!nm && !opts.length) continue;
+        out.push({ name: nm, options: opts });
+    }
+    return out;
+}
+function specProduct(id) {
+    var list = specProducts();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && typeof list[i] === 'object' && specStr(list[i].id) === specStr(id)) return list[i];
+    }
+    return null;
+}
+
+// ---------------- 分类 → 模版 key ----------------
+function specCatKey(prod) {
+    var cat = '';
+    try { cat = (prod && prod.cat !== null && prod.cat !== undefined) ? prod.cat : ''; } catch (e) { cat = ''; }
+    var c = specStr(cat).toLowerCase().replace(/[\s_\-]/g, '');
+    if (c) {
+        if (Object.prototype.hasOwnProperty.call(SPEC_TEMPLATES, c)) return c;
+        if (SPEC_CAT_ALIAS[c]) return SPEC_CAT_ALIAS[c];
+    }
+    var name = specStr(prod && prod.name).toLowerCase();
+    if (name) {
+        for (var i = 0; i < SPEC_NAME_HINTS.length; i++) {
+            var words = SPEC_NAME_HINTS[i].words;
+            for (var j = 0; j < words.length; j++) {
+                if (name.indexOf(words[j]) >= 0) return SPEC_NAME_HINTS[i].key;
+            }
+        }
+        var nm = specStr(prod && prod.name);              // 类目缺失时的最后一点线索
+        if (nm.indexOf('围巾') >= 0) return 'cloth';
+        if (nm.indexOf('对戒') >= 0 || nm.indexOf('戒指') >= 0) return 'jewel';
+    }
+    return 'other';                                       // 未知分类 → 通用模版
+}
+function specClone(list) {
+    var out = [];
+    for (var i = 0; i < (list || []).length; i++) {
+        var it = list[i] || {};
+        out.push({ name: specTxt(it.name, 16), options: Array.isArray(it.options) ? it.options.slice() : [] });
+    }
+    return out;
+}
+function specByTplKey(key) {
+    if (Object.prototype.hasOwnProperty.call(SPEC_TEMPLATES, key)) return specClone(SPEC_TEMPLATES[key]);
+    return [{ name: '规格', options: SPEC_DEFAULT_OPTIONS.slice() }];
+}
+// 优先级：商品自带 specs → 分类模版 → 通用模版 → 最后兜底；缺名字/缺选项都补齐
+function specSchemaFor(prod) {
+    var id = specStr(prod && prod.id);
+    var own = id ? specProductSpecs(id) : [];
+    var schema = (own && own.length) ? specClone(own) : specByTplKey(specCatKey(prod));
+    var out = [];
+    for (var i = 0; i < schema.length; i++) {
+        var g = schema[i] || {};
+        var nm = specTxt(g.name, 16) || '规格';
+        var opts = (g.options || []).slice();
+        if (!opts.length) opts = SPEC_DEFAULT_OPTIONS.slice();
+        out.push({ name: nm, options: opts });
+    }
+    if (!out.length) out.push({ name: '规格', options: SPEC_DEFAULT_OPTIONS.slice() });
+    return out;
+}
+// 当前选择：不在选项里的一律回落到第一个选项，保证「不选直接下单」也有规格
+function specSelOf(id, schema) {
+    var saved = specSelMap[specStr(id)];
+    if (!saved || typeof saved !== 'object') saved = {};
+    var sel = {};
+    for (var i = 0; i < (schema || []).length; i++) {
+        var g = schema[i] || {}, nm = specStr(g.name), opts = g.options || [];
+        var v = specTxt(saved[nm], 16);
+        sel[nm] = (v && opts.indexOf(v) >= 0) ? v : (opts[0] || '');
+    }
+    return sel;
+}
+// 多个属性拼成「属性名:选项」，用 ' / ' 连接（原接口只认单一规格字符串）
+function specStrOf(schema, sel) {
+    var parts = [];
+    for (var i = 0; i < (schema || []).length; i++) {
+        var g = schema[i] || {}, nm = specStr(g.name), v = sel ? specStr(sel[nm]) : '';
+        if (v) parts.push(nm + ':' + v);
+    }
+    return parts.join(' / ');
+}
+function specFor(id) {
+    var schema = specSchemaFor(specProduct(id) || { id: id, cat: '' });
+    return specStrOf(schema, specSelOf(id, schema));
+}
+// 购物车行规格：加购时带的规格优先，其次详情里当前选的，最后模版默认
+function specCartOf(item) {
+    if (!item) return '';
+    var id = specStr(item.id);
+    var direct = specTxt(item.spec, 60);
+    if (direct) return direct;
+    if (specCartMap[id]) return specCartMap[id];
+    return specFor(id);
+}
+function specOrderOf(rec) {
+    if (!rec) return '';
+    var id = specStr(rec.id);
+    if (specOrderMap[id]) return specOrderMap[id];
+    return specFor(id);
+}
+// 规格挂到商品对象的克隆体上（不改原对象、不改结构，只多一个字符串字段）
+function specWithItem(item, ctxId) {
+    var it = item;
+    if (!it || typeof it !== 'object') return it;
+    try { it = Object.assign({}, it); } catch (e) {
+        var cp = {};
+        for (var k in item) { if (Object.prototype.hasOwnProperty.call(item, k)) cp[k] = item[k]; }
+        it = cp;
+    }
+    var id = specStr(it.id);
+    if (id && (!ctxId || specStr(ctxId) === id)) {
+        var sp = specFor(id);
+        if (sp) it.spec = sp;
+    }
+    return it;
+}
+
+// ---------------- DOM：详情 sheet 的规格行 ----------------
+function specHideNativeSize(body, needOwn) {
+    if (!body || !body.classList) return;
+    if (needOwn) {
+        body.classList.add('spec-hide-native-size');
+        var sizes = specById('shop2Sizes');
+        var fld = sizes && sizes.parentNode ? sizes.parentNode : null;
+        if (fld && fld.classList && !fld.classList.contains('spec-native-hidden')) {
+            fld.classList.add('spec-native-hidden');                 // 只加类，不删 DOM
+            fld.setAttribute('data-spec-native', SPEC_NATIVE_ATTR);
+        }
+    } else {
+        body.classList.remove('spec-hide-native-size');
+        var marked = specQa(document, '[data-spec-native="' + SPEC_NATIVE_ATTR + '"]');
+        for (var i = 0; i < marked.length; i++) {
+            if (marked[i].classList) marked[i].classList.remove('spec-native-hidden');
+        }
+    }
+}
+function specEnsureContext(prodId) {
+    var id = specStr(prodId);
+    if (!id) return;
+    if (specCtxProductId !== id) {          // 换商品：选择回到默认（每个属性第一项）
+        specCtxProductId = id;
+        delete specSelMap[id];
+    }
+}
+function specRenderSheet(body) {
+    if (!body) return;
+    var host = specQ(body, '#specFields') || specQ(body, '[data-spec-wrap]');
+    if (!host) return;                                     // 找不到入口：静默降级，保持原有行为
+    var id = specStr(specCtxProductId);
+    if (!id) { host.innerHTML = ''; specHideNativeSize(body, false); return; }
+    var schema = specSchemaFor(specProduct(id) || { id: id, cat: '' });
+    if (!schema.length) { host.innerHTML = ''; specHideNativeSize(body, false); return; }
+    var sel = specSelOf(id, schema), html = '';
+    for (var i = 0; i < schema.length; i++) {
+        var g = schema[i], nm = specStr(g.name), opts = g.options || [], cur = specStr(sel[nm]), btns = '';
+        for (var j = 0; j < opts.length; j++) {
+            var on = specStr(opts[j]) === cur;
+            btns += '<button class="spec-opt' + (on ? ' spec-active' : '') + '" type="button" data-spec-name="' +
+                specEsc(nm) + '" data-spec-opt="' + specEsc(opts[j]) + '" data-spec-i="' + j + '">' +
+                specEsc(opts[j]) + '</button>';
+        }
+        html += '<div class="spec-fld" data-spec-fld="1"><div class="spec-fld-name">' + specEsc(nm) +
+            '</div><div class="spec-opts">' + btns + '</div></div>';
+    }
+    if (host.getAttribute('data-spec-sig') === html) return;   // 幂等：内容一致不重写
+    host.setAttribute('data-spec-sig', html);
+    host.innerHTML = html;
+}
+// 插入锚点：数量输入所在的那一行（必须是 sheetBody 的直接子节点）
+function specQtyRow(body) {
+    var qtyEl = specById('shop2DetailQty'), p = qtyEl ? qtyEl.parentNode : null;
+    while (p && p !== body && p.parentNode !== body) p = p.parentNode;
+    if (!p || p === body) return null;
+    return (p.parentNode === body) ? p : null;
+}
+// 规格容器：优先用 @HTML 段注入的骨架；万一没被拼进 sheet（或被 shop2 重渲染冲掉），这里按需补建
+function specEnsureHost(body) {
+    if (!body) return null;
+    var host = specQ(body, '#specFields') || specQ(body, '[data-spec-wrap]');
+    if (host) return host;
+    host = document.createElement('div');
+    host.className = 'spec-wrap';
+    host.setAttribute('id', 'specFields');
+    host.setAttribute('data-spec-wrap', '1');
+    var row = specQtyRow(body);
+    if (row) body.insertBefore(host, row);                  // 放在「数量」行之前
+    else body.appendChild(host);                            // 兜底：追加到末尾
+    return host;
+}
+function specEnsureSheet() {
+    var sheet = specById('shop2Sheet'), body = specById('shop2SheetBody'), id = specStr(specCtxProductId);
+    if (!body) return false;
+    var visible = !!(sheet && sheet.classList && sheet.classList.contains('shop2-show'));
+    if (!visible || !id) {                                  // sheet 关着 / 没上下文：还原原尺码行
+        specHideNativeSize(body, false);
+        var host0 = specQ(body, '#specFields') || specQ(body, '[data-spec-wrap]');
+        if (host0 && host0.getAttribute('data-spec-sig')) {
+            host0.removeAttribute('data-spec-sig');
+            host0.innerHTML = '';
+        }
+        return false;
+    }
+    var host = specEnsureHost(body);
+    if (!host) return false;
+    var row = specQtyRow(body);
+    if (row && host.nextSibling !== row) body.insertBefore(host, row);   // 每次重渲染都会冲掉，补回来
+    specHideNativeSize(body, true);
+    specRenderSheet(body);
+    return true;
+}
+
+// ---------------- DOM 补丁：购物车行 / 订单行的规格文字 ----------------
+function specPatchCart() {
+    var list = specById('shop2CartList');
+    if (!list) return;
+    var rows = specQa(list, '.shop2-line'), cart = specCartRaw();
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i], sub = specQ(rows[i], '.shop2-line-sub'), main = specQ(rows[i], '.shop2-line-main');
+        if (!sub || !main) continue;
+        if (!row.getAttribute('data-spec-line')) row.setAttribute('data-spec-line', 'cart');
+        var spec = specCartOf(cart[i]);
+        var span = specQ(rows[i], '.spec-cart');
+        if (!spec) {
+            if (span && span.parentNode) span.parentNode.removeChild(span);
+            continue;
+        }
+        if (!span) {
+            span = document.createElement('div');
+            span.className = 'spec-cart shop2-line-spec';
+            span.setAttribute('data-spec-line', 'cart');
+            if (sub.parentNode === main) main.insertBefore(span, sub.nextSibling);
+            else main.appendChild(span);
+        }
+        var text = '规格 ' + spec;
+        if (span.textContent !== text) span.textContent = text;
+    }
+}
+function specPatchOrders() {
+    var list = specById('shop2OrderList');
+    if (!list) return;
+    var rows = specQa(list, '.shop2-order');
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i], el = specQ(row, '.shop2-order-spec');
+        if (!el) continue;
+        var id = specStr(row.getAttribute('data-shop2-order'));
+        if (!specOrderMap[id]) specOrderMap[id] = specOrderOf({ id: id });
+        var start = specOrderMap[id] ? ('规格 ' + specOrderMap[id] + ' · ') : '';
+        var tail = specStr(el.textContent);
+        var cut = tail.indexOf(' · ');
+        var base = (cut >= 0) ? tail.slice(cut + 3) : tail;
+        if (base.indexOf('规格 ') === 0) base = '';          // 避免反复叠加
+        var text = start + base;
+        if (el.textContent !== text) el.textContent = text;
+    }
+}
+
+// ---------------- 事件：规格选项点击（捕获阶段，先于 shop2 的 sheet 委托） ----------------
+function specPickOption(opt) {
+    var body = specById('shop2SheetBody');
+    if (!body || !opt) return false;
+    var host = specQ(body, '#specFields') || specQ(body, '[data-spec-wrap]');
+    var id = specStr(specCtxProductId);
+    if (!host || !id) return false;
+    var nm = specTxt(opt.getAttribute('data-spec-name'), 16);
+    var val = specTxt(opt.getAttribute('data-spec-opt'), 16);
+    if (!nm || !val) return false;
+    if (!specSelMap[id] || typeof specSelMap[id] !== 'object') specSelMap[id] = {};
+    specSelMap[id][nm] = val;
+    var siblings = specQa(host, '[data-spec-name="' + specCssEsc(nm) + '"]');
+    for (var i = 0; i < siblings.length; i++) {
+        if (!siblings[i].classList) continue;
+        if (siblings[i] === opt) siblings[i].classList.add('spec-active');
+        else siblings[i].classList.remove('spec-active');
+    }
+    return true;
+}
+function specOnClick(ev) {
+    try {
+        var t = ev.target;
+        if (!t || typeof t.closest !== 'function') return;
+        var card = t.closest('[data-shop2-i]');              // 商品卡片：先记下上下文商品
+        if (card) {
+            var grid = card.closest('#shop2Grid');
+            var btn = t.closest('[data-shop2-act]');
+            var act = btn ? specStr(btn.getAttribute('data-shop2-act')) : '';
+            if (grid && (act === 'open' || act === 'quickadd')) {
+                var cards = specQa(grid, '[data-shop2-act="open"]'), idx = -1;
+                for (var i = 0; i < cards.length; i++) { if (cards[i] === card) { idx = i; break; } }
+                var list = specProducts(), p = (idx >= 0) ? list[idx] : null;
+                if (p && specStr(p.id)) specEnsureContext(p.id);
+                else specCtxProductId = null;                // 对不上就清空，避免用错商品
+            }
+        }
+        var opt = t.closest('[data-spec-opt]');              // 规格选项：本模块自己处理并拦下事件
+        if (opt) {
+            if (typeof ev.preventDefault === 'function') ev.preventDefault();
+            if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+            if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+            specPickOption(opt);
+        }
+    } catch (e) { /* 静默降级 */ }
+}
+
+// ---------------- 包装原接口：加购 / 下单 / 代付都带上规格 ----------------
+function specWrap() {
+    if (specWrapped) return true;
+    var si = null;
+    try { si = w.shopInternal; } catch (e) {}
+    if (!si || typeof si !== 'object') return true;           // 找不到原接口：静默降级
+    specWrapped = true;
+    try {
+        if (typeof si.addToCart === 'function') {
+            var origAdd = si.addToCart;
+            si.addToCart = function(item, qty) {
+                var ctx = specStr(specCtxProductId);
+                var id = (item && item.id !== null && item.id !== undefined) ? specStr(item.id) : ctx;
+                var withSpec = specWithItem(item, ctx || id);
+                if (withSpec && specStr(withSpec.spec)) specCartMap[specStr(withSpec.id)] = specStr(withSpec.spec);
+                return arguments.length > 1 ? origAdd.call(this, withSpec, qty) : origAdd.call(this, withSpec);
+            };
+        }
+        if (typeof si.purchase === 'function') {
+            var origBuy = si.purchase;
+            si.purchase = function(item, mode, opts) {
+                var ctx = specStr(specCtxProductId);
+                var id = (item && item.id !== null && item.id !== undefined) ? specStr(item.id) : ctx;
+                var withSpec = specWithItem(item, ctx || id);
+                if (withSpec && specStr(withSpec.spec)) {
+                    var key = (ctx && ctx === specStr(withSpec.id)) ? ctx : specStr(withSpec.id);
+                    specOrderMap[key] = specStr(withSpec.spec);
+                }
+                var args = Array.prototype.slice.call(arguments);
+                args[0] = withSpec;
+                return origBuy.apply(this, args);
+            };
+        }
+        if (typeof si.askPartnerPay === 'function') {
+            var origPay = si.askPartnerPay;
+            si.askPartnerPay = function(item) {
+                var ctx = specStr(specCtxProductId);
+                var id = (item && item.id !== null && item.id !== undefined) ? specStr(item.id) : ctx;
+                var spec = specFor(ctx || id);                 // 代付是异步的：先把规格算好存住
+                if (spec) { specCartMap[specStr(id)] = spec; specOrderMap[specStr(id)] = spec; }
+                return origPay.apply(this, arguments);
+            };
+        }
+    } catch (e) { /* 静默降级 */ }
+    return true;
+}
+
+// ---------------- 观察与初始化 ----------------
+function specRun() {
+    try { specEnsureSheet(); } catch (e) {}
+    try { specPatchCart(); } catch (e) {}
+    try { specPatchOrders(); } catch (e) {}
+}
+function specObserve() {
+    try {
+        var MO = w.MutationObserver || w.WebKitMutationObserver;
+        if (!MO || !document.body) return;
+        var pending = false;
+        var schedule = function() {
+            if (pending) return;
+            pending = true;
+            var run = function() { pending = false; specRun(); };
+            if (typeof w.requestAnimationFrame === 'function') { try { w.requestAnimationFrame(run); return; } catch (e) {} }
+            setTimeout(run, 16);
+        };
+        var ob = new MO(function(muts) {
+            for (var i = 0; i < muts.length; i++) {
+                var t = muts[i] && muts[i].target;
+                if (t && typeof t.closest === 'function' && t.closest('[data-spec-wrap]')) continue;
+                schedule();
+                return;
+            }
+        });
+        var ids = ['shop2Grid', 'shop2SheetBody', 'shop2CartList', 'shop2OrderList'];
+        for (var i = 0; i < ids.length; i++) {
+            var node = specById(ids[i]);
+            if (node) { try { ob.observe(node, { childList: true, subtree: true }); } catch (e) {} }
+        }
+        // sheet 本体只看 class：openSheet / closeSheet 一改 class 就补一次渲染
+        var sheet = specById('shop2Sheet');
+        if (sheet) { try { ob.observe(sheet, { attributes: true, attributeFilter: ['class'] }); } catch (e) {} }
+    } catch (e) { /* 静默降级 */ }
+}
+function specStartTimer() {
+    if (specTimer) return;
+    var tick = function() {
+        try {
+            var sheet = specById('shop2Sheet');
+            var visible = !!(sheet && sheet.classList && sheet.classList.contains('shop2-show'));
+            if (!visible) specCtxProductId = null;    // sheet 关闭：上下文复位，下次打开重算默认
+            specRun();
+        } catch (e) {}
+    };
+    try {
+        specTimer = setInterval(tick, 700);
+        tick();
+    } catch (e) { specTimer = null; }
+}
+function initSpecFeature() {
+    if (specReady) { specRun(); return true; }        // 幂等：重复调用只再补一次
+    specReady = true;
+    try {
+        if (document.body && typeof document.addEventListener === 'function') {
+            document.addEventListener('click', specOnClick, true);
+        }
+        specWrap();
+        specObserve();
+        specStartTimer();
+    } catch (e) { /* 静默降级 */ }
+    return true;
+}
+
+// ---------------- 对外 ----------------
+w.initSpecFeature = initSpecFeature;
+w.specFeatureInternal = {
+    templates: SPEC_TEMPLATES, alias: SPEC_CAT_ALIAS, hints: SPEC_NAME_HINTS,
+    catKey: function(prod) { return specCatKey(prod || {}); },
+    productSpecs: function(id) { return specProductSpecs(id); },
+    schemaForId: function(id) { return specSchemaFor(specProduct(id) || { id: id, cat: '' }); },
+    schema: function(prod) { return specSchemaFor(prod || {}); },
+    selOf: function(id) { return specSelOf(id, specSchemaFor(specProduct(id) || { id: id, cat: '' })); },
+    sel: specSelMap, cart: specCartMap, orders: specOrderMap,
+    specOf: function(id) { return specFor(id); },
+    specAll: function(schema, sel) { return specStrOf(schema, sel); },
+    cartLineSpec: function(item) { return specCartOf(item); },
+    orderLineSpec: function(rec) { return specOrderOf(rec); },
+    pick: function(nm, opt) {
+        return specPickOption({ getAttribute: function(k) {
+            return k === 'data-spec-name' ? nm : (k === 'data-spec-opt' ? opt : null);
+        } });
+    },
+    ctx: function() { return specCtxProductId; },
+    setCtx: function(id) { specCtxProductId = (id === null || id === undefined) ? null : specStr(id); return specCtxProductId; },
+    ensureSheet: specEnsureSheet, run: specRun, wrapped: function() { return specWrapped; }
+};
+
+// 自举：主文件加载器列表里没有本模块时也能生效（幂等，多调几次无副作用）
+(function(){
+    var boot = function() { try { initSpecFeature(); } catch (e) {} };
+    try {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+        else boot();
+        setTimeout(boot, 600);
+        setTimeout(boot, 2000);
+    } catch (e) {}
+})();
+
+})();
+
+})();
 /* ===== 功能模块：walk（独立作用域） ===== */
 (function(){
 
