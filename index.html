@@ -6919,6 +6919,13 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         }
         .product-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+        /* ===== 提示条/浮层不吞点击：否则"再点一次就发出去"的提示会挡住第二次点击 ===== */
+        .notification { pointer-events: none !important; }
+        .notification * { pointer-events: none !important; }
+        /* 贴纸磁贴：确保可点且在最上层 */
+        .sticker-grid-item { cursor: pointer; }
+        .sticker-grid-item.tap-again { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
