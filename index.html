@@ -8324,6 +8324,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             // 再不行退回内存，保证 iOS 上各种环境都能正常启动而不是白屏。
             const memStore = {};
             let storageSlow = false; // 存储层超时降级标志：为 true 时写入走 localStorage，避免覆盖主存储里的旧数据
+            let dataLoaded = false; // 真实数据是否已从 IndexedDB 读回（未读回前一律不许保存，否则空白状态会覆盖真数据）
             function storageGet(key) {
                 var _fromLocal = function () {
                     try { var raw = window.localStorage.getItem(key); return Promise.resolve(raw ? JSON.parse(raw) : null); }
@@ -8369,6 +8370,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             // 这样意外退出/被系统杀掉进程时也不会丢数据；下次启动取两者中较新的一份。
             function flushSave() {
                 if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
+                // 真实数据还没读回：不保存！否则空白/默认状态会把存储里的真数据（含图片）覆盖掉
+                if (!dataLoaded) return Promise.resolve();
                 try {
                         memeReplies = memeReplies.filter(item => typeof item === 'string' && (item.startsWith(
                             'data:') || item.startsWith('http')));
@@ -8384,8 +8387,12 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         // 同步写一份 localStorage 镜像（含图片）：这是"后台被杀"时唯一能恢复的来源。
                         // 写不下时按优先级腾空间：先丢最旧的消息保住图片/设置；实在不行才降级成无图镜像。
                         const __mk = getStorageKey('appData');
+                        const __mirNow = Date.now();
+                        const __mirForce = !!(typeof document !== 'undefined' && document.hidden);
+                        const __mirSkip = !__mirForce && (__mirNow - lastMirrorAt < 4000);   // 节流：图片在 IndexedDB，镜子只是保险
+                        if (!__mirSkip) lastMirrorAt = __mirNow;
                         try {
-                            window.localStorage.setItem(__mk, JSON.stringify(data));
+                            if (!__mirSkip) window.localStorage.setItem(__mk, JSON.stringify(data));
                         } catch (e) {
                             try {
                                 var light = Object.assign({}, data);
@@ -12871,6 +12878,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
 
                 const loadPromise = loadData();
                 loadPromise.then(() => {
+                    dataLoaded = true;   // 真数据已就位，此后允许保存
                     if (!uiBooted) { bootUI(); return; }
                     // 迟到的数据：重新套用设置与重绘（不再重复绑定事件/定时器）
                     storageSlow = false;
@@ -12888,8 +12896,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 setTimeout(() => {
                     if (uiBooted) return;
                     storageSlow = true;
-                    bootUI();
-                }, 1500);
+                    bootUI();   // 仍然不置 dataLoaded：读回前禁止保存，避免覆盖真数据
+                }, 8000);
             }
 
             // ============================================================
@@ -15507,7 +15515,32 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 if (plib.partner && plib.partner.length && (!lib.partner || !lib.partner.length)) { lib.partner = plib.partner.slice(); restore = true; }
                 if (typeof plib.currentMine === 'string' && plib.currentMine && !lib.currentMine) { lib.currentMine = plib.currentMine; restore = true; }
                 if (typeof plib.currentPartner === 'string' && plib.currentPartner && !lib.currentPartner) { lib.currentPartner = plib.currentPartner; restore = true; }
-                ['homePageBg', 'togetherBg'].forEach(function (k) {
+                /* 覆盖率更高的图片自愈：把镜像里有图、当前为空的一律补回来 */
+                try {
+                    var ps = (parsed.settings || {});
+                    if (ps.chatBgImage && (!window.settings || !window.settings.chatBgImage)) { try { window.settings.chatBgImage = ps.chatBgImage; } catch (e) {} }
+                    var pprof = (pfd.profile || {}), fprof = (fd.profile || (fd.profile = {}));
+                    if (pprof.cover && !fprof.cover) { fprof.cover = pprof.cover; restore = true; }
+                    if (pprof.avatar && !fprof.avatar) { fprof.avatar = pprof.avatar; restore = true; }
+                    if (pfd.companyDiary && pfd.companyDiary.bg && pfd.companyDiary.bg.image) {
+                        var fc = fd.companyDiary || (fd.companyDiary = {});
+                        if (!fc.bg || !fc.bg.image) { fc.bg = pfd.companyDiary.bg; restore = true; }
+                    }
+                    var _pairs = [['stickerLibrary', 'stickerLibrary'], ['myStickerLibrary', 'myStickerLibrary'], ['memeReplies', 'memeReplies']];
+                    for (var _pi = 0; _pi < _pairs.length; _pi++) {
+                        var pk = _pairs[_pi][0], fk = _pairs[_pi][1];
+                        var pv2 = parsed[pk], fv2 = window[fk];
+                        var pArr = Array.isArray(pv2), fArr = Array.isArray(fv2);
+                        if (pArr && pv2.length && (!fArr || !fv2.length)) { try { window[fk] = pv2.slice(); restore = true; } catch (e) {} }
+                    }
+                    if (Array.isArray(parsed.momentPosts) && Array.isArray(window.momentPosts)) {
+                        for (var _mi = 0; _mi < window.momentPosts.length; _mi++) {
+                            var mp = window.momentPosts[_mi], pp = null;
+                            for (var _pj = 0; _pj < parsed.momentPosts.length; _pj++) { if (parsed.momentPosts[_pj] && parsed.momentPosts[_pj].id === mp.id) { pp = parsed.momentPosts[_pj]; break; } }
+                            if (pp && Array.isArray(pp.images) && pp.images.length && (!mp.images || !mp.images.length)) { mp.images = pp.images.slice(); restore = true; }
+                        }
+                    }
+                } catch (e) {}                ['homePageBg', 'togetherBg'].forEach(function (k) {
                     if (pfd[k] && pfd[k].image && (!fd[k] || !fd[k].image)) { fd[k] = pfd[k]; restore = true; }
                 });
                 if (pfd.loveDiary && pfd.loveDiary.bg && pfd.loveDiary.bg.image) {
@@ -16457,7 +16490,7 @@ try {
         dt = new Date(+m[1], +m[2] - 1, +m[3]);
         return (dt.getFullYear() === +m[1] && dt.getMonth() === +m[2] - 1 && dt.getDate() === +m[3]) ? m[0] : '';
     }
-    function lovImg(v) { if (typeof v !== 'string') return ''; var s = v.trim().replace(/["'\s]/g, ''); return (s && (s.indexOf('data:image') === 0 || /^https?:\/\//i.test(s)) && s.length < 400000) ? s : ''; }   // 图片必须是字符串
+    function lovImg(v) { if (typeof v !== 'string') return ''; var s = v.trim().replace(/[\r\n\t ]/g, ''); return (s && (s.indexOf('data:image') === 0 || /^https?:\/\//i.test(s)) && s.length < 3000000) ? s : ''; }   // 上限 400KB -> 3MB（否则大图会被静默丢弃）
     function lovStripEmoji(v) { return String(v === undefined || v === null ? '' : v).replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim(); }
     function lovName(key, dft) { var w = lovW(), s = (w && w.settings && typeof w.settings === 'object') ? w.settings : {}; return (typeof s[key] === 'string' && s[key].trim()) ? s[key].trim() : dft; }
     function lovPartnerName() { return lovName('partnerName', '梦角'); }   // 实时读 settings，改完昵称立刻生效
