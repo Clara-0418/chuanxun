@@ -4796,6 +4796,13 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：fx ===== */
+/* fx 模块：只补一处「拒绝代付」卡片标题的着色（其余观感完全沿用 pay2 原样式；配色全走主题变量，深色模式自动跟随） */
+#chatContainer .pay2-card-title.fx-pay-reject {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
 /* ===== 功能模块：spec ===== */
 /* ===== 功能模块：spec（商品规格按属性 / 分类渲染；独立作用域，不碰其它模块） =====
  * id / class 前缀统一 spec：.spec-wrap / .spec-fld / .spec-fld-name / .spec-opts / .spec-opt
@@ -7536,6 +7543,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：fx ===== -->
+<!-- fx 模块：不新增任何 DOM 结构（代付的两张卡片完全复用 pay2 的 product 卡片渲染；图片压缩 / 存储修复均无界面） -->
+
 <!-- ===== 功能模块：spec ===== -->
 <!-- 商品规格：由 spec 模块按「商品自带 specs → 分类模版 → 通用模版」动态填充，这里只留骨架 -->
 <div class="spec-wrap" id="specFields" data-spec-wrap="1"></div>
@@ -13467,7 +13477,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14121,6 +14131,928 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：fx（独立作用域） ===== */
+(function(){
+
+/* =========================================================================
+ * fx 修复 / 功能模块（单文件注入；绝不改主程序任何函数体）
+ *   T1 发起代付 = 两张卡片（用户请求卡 + 梦角结果卡）
+ *   T2 聊天图片发送前压缩（最长边 1600px / JPEG q0.82，超 500KB 再降档；GIF 原样发）
+ *   T3 「重置所有数据」后清掉 localStorage 的 appData 镜像 + imgBackup 图片备份
+ *   T4 存储自愈不复活「用户刚刚主动删掉」的头像 / 背景
+ * 实现口径：一律用「包装 / 委托 / 只读观察 / 追加样式」，幂等、原函数返回值透传、
+ *           异常全部 try/catch 兜住（任何一环失败都退化成原生行为，页面不会崩）。
+ * 入口：window.initFixFeature()（可重复调用），脚本自身也会自举。
+ * ========================================================================= */
+(function () {
+    'use strict';
+
+    /* 同一个页面重复注入（脚本被执行两次）时直接复用上一份，避免监听器/包装叠两层 */
+    try {
+        if (window.__fxFixLoaded) {
+            if (typeof window.initFixFeature === 'function') { try { window.initFixFeature(); } catch (e) {} }
+            return;
+        }
+        window.__fxFixLoaded = true;
+    } catch (e) {}
+
+    var VERSION = 'fx-1.0.0';
+    var APP_PREFIX = 'CHAT_APP_V13_';
+    var KEY_APP = APP_PREFIX + 'appData';            // 主 localStorage 镜像
+    var KEY_IMG = APP_PREFIX + 'imgBackup';          // 图片专用备份
+    var KEY_DEL = 'CHAT_APP_FX_lastDeleteAt';        // 本模块自己的「最后一次主动删除」时间戳
+    var FLAG = '__fxFix';
+
+    /* ---------------- 通用工具：全部兜异常，永不抛出 ---------------- */
+    function nowMs() { return Date.now(); }
+    function s(v) { return (v === null || v === undefined) ? '' : String(v); }
+    function safe(fn, dflt) { try { var v = fn(); return (v === undefined) ? dflt : v; } catch (e) { return dflt; } }
+    function getSettings() {
+        return safe(function () { var x = window.settings; return (x && typeof x === 'object') ? x : null; }, null);
+    }
+    function myName() { var x = getSettings(); return s(x && x.myName) || '我'; }
+    function partnerName() { var x = getSettings(); return s(x && x.partnerName) || '梦角'; }
+    function getMessages() {
+        return safe(function () { var m = window.messages; return Array.isArray(m) ? m : null; }, null);
+    }
+    function getFeatureData() {
+        return safe(function () { var f = window.featureData; return (f && typeof f === 'object') ? f : null; }, null);
+    }
+    function isUserSenderName(sender) {
+        var x = s(sender);
+        if (!x) return false;
+        if (x === 'user' || x === 'me' || x === '我') return true;
+        var mine = s(safe(function () { return (window.settings || {}).myName; }, ''));
+        return !!mine && x === mine;
+    }
+    function notify(msg, type, dur) {
+        try {
+            if (typeof window.showNotification === 'function') {
+                window.showNotification(s(msg), type || 'info', dur || 2400);
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+    function getAttr(el, name) {
+        return safe(function () {
+            if (!el) return '';
+            if (typeof el.getAttribute === 'function') return s(el.getAttribute(name));
+            return s(el[name]);
+        }, '');
+    }
+    function hasClass(el, cls) {
+        return safe(function () {
+            if (!el) return false;
+            if (el.classList && typeof el.classList.contains === 'function') return !!el.classList.contains(cls);
+            return (' ' + s(el.className) + ' ').indexOf(' ' + cls + ' ') !== -1;
+        }, false);
+    }
+    function addClass(el, cls) {
+        safe(function () {
+            if (!el) return;
+            if (el.classList && typeof el.classList.add === 'function') el.classList.add(cls);
+            else el.className = (s(el.className) + ' ' + cls).replace(/\s+/g, ' ').trim();
+        });
+    }
+    /* 向上找最近的匹配祖先（不依赖 Element.closest，桩环境里也能跑） */
+    function closestEl(el, sel) {
+        try {
+            var n = el;
+            var guard = 0;
+            while (n && n.nodeType === 1 && guard < 64) {
+                guard++;
+                if (typeof n.matches === 'function') { if (n.matches(sel)) return n; }
+                else if (typeof n.msMatchesSelector === 'function') { if (n.msMatchesSelector(sel)) return n; }
+                else if (n.getAttribute) {
+                    var id = s(n.getAttribute('id'));
+                    var attrSel = /^\[([^\]=]+)(?:="([^"]*)")?\]$/.exec(sel);
+                    if (attrSel) {
+                        var v = s(n.getAttribute(attrSel[1]));
+                        if (v && (attrSel[2] === undefined || v === attrSel[2])) return n;
+                    } else if (/^\.[\w-]+$/.test(sel) && hasClass(n, sel.slice(1))) return n;
+                    else if (/^#[\w-]+$/.test(sel) && id === sel.slice(1)) return n;
+                }
+                n = n.parentNode;
+            }
+        } catch (e) {}
+        return null;
+    }
+    function byId(id) { return safe(function () { return document.getElementById(id); }, null); }
+    /* 浏览器构造器 / 编解码：window 上没有就回落到全局作用域（typeof 守卫，取不到返回 null） */
+    function ctorOf(name) {
+        try { var w = window; if (w && typeof w[name] === 'function') return w[name]; } catch (e) {}
+        try {
+            if (name === 'Image' && typeof Image === 'function') return Image;
+            if (name === 'FileReader' && typeof FileReader === 'function') return FileReader;
+            if (name === 'DataTransfer' && typeof DataTransfer === 'function') return DataTransfer;
+            if (name === 'MutationObserver' && typeof MutationObserver === 'function') return MutationObserver;
+            if (name === 'File' && typeof File === 'function') return File;
+            if (name === 'Blob' && typeof Blob === 'function') return Blob;
+        } catch (e) {}
+        return null;
+    }
+    function atobOf(body) {
+        try { if (window && typeof window.atob === 'function') return window.atob(body); } catch (e) {}
+        try { if (typeof atob === 'function') return atob(body); } catch (e) {}
+        return null;
+    }
+    function bytesOf(len) {
+        try { if (typeof Uint8Array === 'function') return new Uint8Array(len); } catch (e) {}
+        return [];
+    }
+
+    /* =====================================================================
+     * 任务 1：发起代付 → 聊天里出现两条卡片
+     *   卡片 A：我发的代付请求（sender = 我的昵称，文案「我有一笔订单需要支付」，pay2 → 标签「代付」）
+     *   卡片 B：梦角的结果（sender = 梦角昵称；同意时由主程序自己发「已帮你付好了」，
+     *           拒绝时由本模块补一条「我拒绝了你的代付请求」）
+     * 卡片渲染完全交给主程序 addMessage + pay2 的 product 卡片，不自己画。
+     * 原有 1-3 秒延迟、70% 同意概率、消息/订单/礼物柜/点评逻辑全部不动。
+     * ===================================================================== */
+    var ASK_TITLE = '我有一笔订单需要支付';
+    var PAID_TITLE = '已帮你付好了';
+    var REJECT_TITLE = '我拒绝了你的代付请求';
+
+    var T1 = {
+        askWrapped: false,      // window.shopInternal.askPartnerPay 是否已包
+        clickHooked: false,     // 商城详情页「找TA代付」按钮的委托是否已挂
+        observer: null,         // 拒绝卡标题修正用的 MutationObserver
+        fixQueued: false,
+        serial: 0,
+        pending: null,
+        lastAskPid: '',
+        lastAskAt: 0,
+        candidate: null         // 点了代付按钮、等确认框结果
+    };
+
+    function productOf(p) {
+        try {
+            if (!p || typeof p !== 'object') return null;
+            var price = (p.price === null || p.price === undefined || p.price === '') ? 0 : Number(p.price);
+            if (!isFinite(price)) price = 0;
+            var out = {
+                id: s(p.id) || ('fx_shop_p_' + nowMs()),
+                name: s(p.name) || '商品',
+                price: price,
+                icon: s(p.icon)
+            };
+            if (p.qty) out.qty = p.qty;
+            if (p.cat) out.cat = s(p.cat);
+            if (p.spec) out.spec = s(p.spec);        // spec 模块注入的规格一并透传
+            if (p.image) out.image = s(p.image);     // 有图就用图，没有就回落 icon
+            return out;
+        } catch (e) { return null; }
+    }
+
+    /* 一张 product 卡片消息 = 主程序 addMessage + msg.product（pay2 负责渲染成卡片） */
+    function sendProductCard(sender, text, product) {
+        try {
+            if (typeof window.addMessage !== 'function') return false;
+            window.addMessage({ sender: s(sender), text: s(text), product: product });
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function findProductById(id) {
+        try {
+            var fd = getFeatureData();
+            var list = (fd && fd.shop && Array.isArray(fd.shop.products)) ? fd.shop.products : [];
+            for (var i = 0; i < list.length; i++) {
+                if (list[i] && s(list[i].id) === s(id)) return list[i];
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    /* 基线之后是否出现了「梦角发的商品卡片」——这就是主程序 70% 同意分支的特征 */
+    function partnerCardAfter(token) {
+        try {
+            var msgs = getMessages();
+            if (!msgs || !token) return false;
+            var from = Math.max(0, token.base | 0);
+            if (msgs.length < from) return false;
+            for (var i = from; i < msgs.length; i++) {
+                var m = msgs[i];
+                if (!m || !m.product) continue;
+                if (isUserSenderName(m.sender)) continue;   // 自己发的卡不算
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    /* 发起一笔代付：先发「我的请求卡」，再等主程序的 1-3 秒结果 */
+    function beginAsk(p, source) {
+        try {
+            var prod = productOf(p);
+            if (!prod) return false;
+            var t = nowMs();
+            /* 同一次代付可能同时命中两条挂钩（内部接口 + 按钮委托），这里去重 */
+            if (T1.lastAskPid === prod.id && (t - T1.lastAskAt) < 2600) return false;
+            if (T1.pending && T1.pending.pid === prod.id && (t - T1.pending.at) < 2600) return false;
+
+            T1.serial++;
+            var token = { serial: T1.serial, pid: prod.id, at: t, product: prod, base: 0, done: false, src: s(source) };
+            if (!sendProductCard(myName(), ASK_TITLE, prod)) return false;
+            token.base = safe(function () { var m = getMessages(); return m ? m.length : 0; }, 0);
+            T1.pending = token;
+            T1.lastAskPid = prod.id;
+            T1.lastAskAt = t;
+            /* 读不到 messages 时无法判断"同意 / 拒绝"，宁可不补拒绝卡，也不冤枉一次成功的代付 */
+            if (!getMessages()) return true;
+            watchOutcome(token);
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* 结果观察：3.8 秒内没等到「梦角替你付」的商品卡 → 判为拒绝，补一张拒绝卡 */
+    function watchOutcome(token) {
+        try {
+            var started = nowMs();
+            var deadline = 3800;      // 主程序 1-3 秒延迟 + 余量
+            var extended = false;
+            function tick() {
+                try {
+                    if (!token || token.done) return;
+                    if (partnerCardAfter(token)) {           // 同意：主程序已经发了「已帮你付好了」
+                        token.done = true;
+                        if (T1.pending === token) T1.pending = null;
+                        return;
+                    }
+                    if (nowMs() - started >= deadline) {
+                        if (!extended && safe(function () { return !!document.hidden; }, false)) {
+                            extended = true;                 // 后台被节流：再给一轮，别误判成拒绝
+                            deadline += 3200;
+                        } else {
+                            finishReject(token);
+                            return;
+                        }
+                    }
+                    setTimeout(tick, 320);
+                } catch (e) { safe(function () { finishReject(token); }); }
+            }
+            setTimeout(tick, 320);
+        } catch (e) {}
+    }
+
+    function finishReject(token) {
+        try {
+            if (!token || token.done) return;
+            token.done = true;
+            if (T1.pending === token) T1.pending = null;
+            if (partnerCardAfter(token)) return;             // 迟到一步的同意卡：不再补拒绝卡
+            sendProductCard(partnerName(), REJECT_TITLE, token.product);
+            scheduleRejectTitleFix();
+        } catch (e) {}
+    }
+
+    /* pay2 会给「梦角」发的拒绝卡标题加昵称前缀，按需求统一成「我拒绝了你的代付请求」 */
+    function fixRejectTitles() {
+        try {
+            var root = byId('chatContainer');
+            if (!root) return 0;
+            if (s(root.textContent).indexOf('拒绝了你的代付请求') === -1) return 0;
+            var list = safe(function () { return root.querySelectorAll ? root.querySelectorAll('.pay2-card-title') : null; }, null);
+            if (!list || !list.length) return 0;
+            var n = 0;
+            for (var i = 0; i < list.length; i++) {
+                var el = list[i];
+                var txt = s(el.textContent);
+                if (!txt || txt === REJECT_TITLE) continue;
+                if (!/拒绝了你的代付请求$/.test(txt)) continue;
+                var wrap = closestEl(el, '.message-wrapper');
+                if (wrap && hasClass(wrap, 'sent')) continue;   // 自己发的那张不动
+                el.textContent = REJECT_TITLE;
+                addClass(el, 'fx-pay-reject');
+                n++;
+            }
+            return n;
+        } catch (e) { return 0; }
+    }
+
+    function scheduleRejectTitleFix() {
+        if (T1.fixQueued) return;
+        T1.fixQueued = true;
+        setTimeout(function () {
+            T1.fixQueued = false;
+            safe(fixRejectTitles);
+        }, 80);
+    }
+
+    function observeChat() {
+        if (T1.observer) return true;
+        try {
+            var root = byId('chatContainer');
+            var MO = ctorOf('MutationObserver');
+            if (!root || !MO) return false;
+            T1.observer = new MO(function () { scheduleRejectTitleFix(); });
+            T1.observer.observe(root, { childList: true, subtree: true });
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* 挂钩 1：主程序导出的代付接口（shop2 / shop3 / spec 等模块都从这里进） */
+    function wrapAskPartnerPay() {
+        try {
+            if (T1.askWrapped) return true;
+            var si = safe(function () { return window.shopInternal; }, null);
+            if (!si || typeof si.askPartnerPay !== 'function') return false;
+            var orig = si.askPartnerPay;
+            if (orig[FLAG + 'Ask']) { T1.askWrapped = true; return true; }
+            var wrapped = function (item) {
+                var ret;
+                try { ret = orig.apply(this, arguments); }        // 原函数照旧被调用
+                catch (e) { ret = undefined; }                     // 异常兜住，不往外抛
+                try { if (ret !== false) beginAsk(item, 'internal'); } catch (e2) {}
+                return ret;                                        // 返回值透传
+            };
+            wrapped[FLAG + 'Ask'] = true;
+            wrapped.__fxOriginal = orig;
+            si.askPartnerPay = wrapped;
+            T1.askWrapped = true;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function hasAskDialogOpen() {
+        return safe(function () {
+            var nodes = document.querySelectorAll ? document.querySelectorAll('.ios-dialog-mask') : null;
+            if (!nodes) return false;
+            for (var i = 0; i < nodes.length; i++) {
+                if (/帮你付这一单/.test(s(nodes[i].textContent))) return true;
+            }
+            return false;
+        }, false);
+    }
+
+    /* 挂钩 2：商城主详情页的「找TA代付」按钮（主程序走本地函数，只能从点击委托观察）
+     *   点按钮 → 主程序先弹 iOS 确认框 → 点「确定」才是真的发起。
+     *   所以：记下候选商品 → 确认框确定后补发请求卡；确认框被取消则不补。
+     *   若压根没有确认框（iosConfirm 不可用），900ms 后兜底补发。 */
+    function onDocClick(e) {
+        try {
+            var t = e && e.target;
+            if (!t || t.nodeType !== 1) return;
+
+            var payBtn = closestEl(t, '[data-shop-act="askPartnerPay"]');
+            if (payBtn) {
+                var cand = { pid: getAttr(payBtn, 'data-id'), at: nowMs() };
+                T1.candidate = cand;
+                setTimeout(function () {
+                    try {
+                        if (T1.candidate !== cand) return;        // 已被确认 / 取消分支处理
+                        if (hasAskDialogOpen()) return;           // 确认框还开着，等用户点
+                        if (nowMs() - cand.at > 4000) return;     // 已经另有挂钩接手
+                        T1.candidate = null;
+                        var p = findProductById(cand.pid);
+                        if (p) beginAsk(p, 'click-fallback');
+                    } catch (e1) {}
+                }, 900);
+                return;
+            }
+
+            var dlg = closestEl(t, '.ios-dialog-mask');
+            if (!dlg || !T1.candidate) return;
+            if (!/帮你付这一单/.test(s(dlg.textContent))) return;
+            if (closestEl(t, '.ios-ok')) {
+                var cand2 = T1.candidate;
+                T1.candidate = null;
+                setTimeout(function () {
+                    try {
+                        var p = findProductById(cand2.pid);
+                        if (p) beginAsk(p, 'click-confirmed');
+                    } catch (e2) {}
+                }, 0);
+            } else if (closestEl(t, '.ios-cancel') || t === dlg) {
+                T1.candidate = null;                          // 取消：不发起，也不补卡
+            }
+        } catch (err) {}
+    }
+
+    function hookPayClick() {
+        try {
+            if (T1.clickHooked) return true;
+            if (!document || typeof document.addEventListener !== 'function') return false;
+            document.addEventListener('click', onDocClick, true);
+            T1.clickHooked = true;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* =====================================================================
+     * 任务 2：聊天图片发送前压缩（拦截 #imageInput 的 change，不改主程序 sendMessage）
+     *   最长边 ≤1600px 的 JPEG q0.82；仍 >500KB 依次降档 0.68 / 0.55；
+     *   GIF 原样发（不拦）；非位图（svg / 非图片）不拦；压不动就让原图照发。
+     * ===================================================================== */
+    var T2 = {
+        hooked: false,
+        busy: false,
+        MAX_SIDE: 1600,
+        QUALITY: [0.82, 0.68, 0.55],
+        TARGET: 500 * 1024
+    };
+
+    function isGifFile(f) {
+        return /^image\/gif$/i.test(s(f && f.type)) || /\.gif$/i.test(s(f && f.name));
+    }
+    function isRasterImage(f) {
+        if (!f) return false;
+        var t = s(f.type).toLowerCase();
+        if (t) {
+            if (t.indexOf('image/') !== 0) return false;
+            if (t === 'image/svg+xml') return false;
+            return true;
+        }
+        return /\.(jpe?g|png|webp|bmp|avif|heic|heif)$/.test(s(f.name).toLowerCase());
+    }
+    function needCompress(f) {
+        if (!f) return false;
+        if (isGifFile(f)) return false;      // GIF：跳过压缩，原样发
+        return isRasterImage(f);
+    }
+
+    function readAsDataUrl(file, cb) {
+        try {
+            var FR = ctorOf('FileReader');
+            if (!FR) { cb(''); return; }
+            var fr = new FR();
+            fr.onload = function (e) { cb(s(e && e.target ? e.target.result : '')); };
+            fr.onerror = function () { cb(''); };
+            fr.readAsDataURL(file);
+        } catch (e) { cb(''); }
+    }
+
+    /* dataURL 的二进制字节数（base64 → 原始大小） */
+    function dataUrlBytes(u) {
+        try {
+            var str = s(u);
+            var i = str.indexOf(',');
+            if (i < 0) return 0;
+            var b64 = str.slice(i + 1);
+            var pad = (b64.match(/=+$/) || [''])[0].length;
+            return Math.max(0, Math.floor(b64.length * 3 / 4) - pad);
+        } catch (e) { return 0; }
+    }
+
+    function downscaleToJpeg(src, cb) {
+        try {
+            var IMG = ctorOf('Image');
+            if (!IMG) { cb(''); return; }
+            var img = new IMG();
+            img.onload = function () {
+                try {
+                    var w = img.naturalWidth || img.width || 0;
+                    var h = img.naturalHeight || img.height || 0;
+                    if (!w || !h) { cb(''); return; }
+                    var scale = Math.min(1, T2.MAX_SIDE / Math.max(w, h));
+                    var tw = Math.max(1, Math.round(w * scale));
+                    var th = Math.max(1, Math.round(h * scale));
+                    var cv = document.createElement('canvas');
+                    cv.width = tw;
+                    cv.height = th;
+                    var ctx = cv.getContext('2d');
+                    if (!ctx) { cb(''); return; }
+                    /* PNG 透明区在 JPEG 里会发黑，先铺白底 */
+                    try { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, tw, th); } catch (e0) {}
+                    ctx.drawImage(img, 0, 0, tw, th);
+                    var out = '';
+                    var qs = T2.QUALITY;
+                    for (var i = 0; i < qs.length; i++) {
+                        out = s(cv.toDataURL('image/jpeg', qs[i]));
+                        if (!out) break;
+                        if (dataUrlBytes(out) <= T2.TARGET) break;   // 仍超 500KB → 再降一档质量
+                    }
+                    cb(/^data:image\/jpeg/i.test(out) ? out : '');
+                } catch (e2) { cb(''); }
+            };
+            img.onerror = function () { cb(''); };
+            img.src = src;
+        } catch (e) { cb(''); }
+    }
+
+    function dataUrlToFile(u, name) {
+        try {
+            var str = s(u);
+            var m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(str);
+            if (!m) return null;
+            var mime = m[1] || 'image/jpeg';
+            var body = m[3] || '';
+            var bin = m[2] ? atobOf(body) : safe(function () { return decodeURIComponent(body); }, null);
+            if (bin === null || bin === undefined) return null;
+            var arr = bytesOf(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i) & 0xff;
+            var B = ctorOf('Blob');
+            var F = ctorOf('File');
+            if (!B || !F) return null;
+            var blob = new B([arr], { type: mime });
+            var base = s(name).replace(/\.[^.]*$/, '') || 'image';
+            return new F([blob], base + '.jpg', { type: mime, lastModified: nowMs() });
+        } catch (e) { return null; }
+    }
+
+    function setInputFile(input, file) {
+        try {
+            if (!input || !file) return false;
+            var DT = ctorOf('DataTransfer');
+            if (!DT) return false;
+            var dt = new DT();
+            dt.items.add(file);
+            input.files = dt.files;
+            return !!(input.files && input.files[0]);
+        } catch (e) { return false; }
+    }
+
+    /* 极端兜底：注入 File 失败时，直接把压缩后的 dataURL 交给主程序 addMessage */
+    function sendDataUrlDirect(dataUrl) {
+        try {
+            if (typeof window.addMessage !== 'function') return false;
+            var mi = byId('messageInput');
+            var text = mi ? s(mi.value).trim() : '';
+            window.addMessage({ sender: 'user', text: text, image: s(dataUrl), status: 'sent' });
+            try {
+                if (mi) { mi.value = ''; if (mi.style) mi.style.height = '38px'; }
+            } catch (e) {}
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function sendViaOriginal(input, jpegDataUrl, origName) {
+        try {
+            var send = safe(function () { return (typeof window.sendMessage === 'function') ? window.sendMessage : null; }, null);
+            if (jpegDataUrl) {
+                var file = dataUrlToFile(jpegDataUrl, origName);
+                if (file && setInputFile(input, file) && send) { send(); return; }
+                if (sendDataUrlDirect(jpegDataUrl)) return;
+            }
+            /* 没有压缩结果 / 中途失败：输入框里还是原图，直接走主程序原逻辑（不丢用户选的文件） */
+            if (send) { send(); return; }
+        } catch (e) {}
+    }
+
+    function onImageChange(e) {
+        try {
+            var input = e && e.target;
+            if (!input || s(input.id) !== 'imageInput') return;
+            var f = safe(function () { return (input.files && input.files[0]) || null; }, null);
+            if (!f) return;
+            if (!needCompress(f)) return;                 // GIF / SVG / 非图片：完全走原逻辑
+            if (T2.busy) return;                          // 上一张还在压：这张走原逻辑，不能把图吞掉
+            /* 抢占这次 change（本监听挂在 document 捕获阶段，先于 #imageInput 上的原监听） */
+            try { if (e.stopPropagation) e.stopPropagation(); } catch (e1) {}
+            try { if (e.preventDefault) e.preventDefault(); } catch (e1) {}
+            T2.busy = true;
+            var origSize = safe(function () { return Number(f.size) || 0; }, 0);
+            readAsDataUrl(f, function (src) {
+                if (!src) { T2.busy = false; sendViaOriginal(input, '', ''); return; }
+                downscaleToJpeg(src, function (jpeg) {
+                    T2.busy = false;
+                    if (!jpeg) { sendViaOriginal(input, '', ''); return; }
+                    var outSize = dataUrlBytes(jpeg);
+                    if (origSize > 0 && outSize >= origSize) { sendViaOriginal(input, '', ''); return; }  // 反而更大：原图照发
+                    sendViaOriginal(input, jpeg, safe(function () { return s(f.name); }, ''));
+                });
+            });
+        } catch (err) { T2.busy = false; }
+    }
+
+    function hookImageInput() {
+        try {
+            if (T2.hooked) return true;
+            if (!document || typeof document.addEventListener !== 'function') return false;
+            document.addEventListener('change', onImageChange, true);
+            T2.hooked = true;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* =====================================================================
+     * 任务 3：重置所有数据后，把两个 localStorage 键也删掉
+     *   主程序的 storageRemove 没有暴露到 window（且它 localforage 分支里提前 return，
+     *   下面那句 localStorage.removeItem 永远不执行），所以按「包装不可达 → 包装重置按钮点击」的口径：
+     *   点 #clearAllDataBtn 后等「真的重置发生」（featureData 被整体换新 / 聊天记录由非空变空），
+     *   再清掉 CHAT_APP_V13_appData 与 CHAT_APP_V13_imgBackup，并多补几拍压住随后的镜像回写。
+     * ===================================================================== */
+    var T3 = { hooked: false, watching: false };
+
+    function purgeMirrors() {
+        var done = [];
+        try { window.localStorage.removeItem(KEY_APP); done.push(KEY_APP); } catch (e) {}
+        try { window.localStorage.removeItem(KEY_IMG); done.push(KEY_IMG); } catch (e) {}
+        return done;
+    }
+
+    function msgsLen() {
+        return safe(function () {
+            var m = window.messages;
+            if (Array.isArray(m)) return m.length;
+            return -1;
+        }, -1);
+    }
+
+    function schedulePurge() {
+        [0, 150, 600, 1500, 3000].forEach(function (d) {
+            setTimeout(function () { safe(purgeMirrors); }, d);
+        });
+    }
+
+    function onResetClick() {
+        try {
+            if (T3.watching) return;
+            T3.watching = true;
+            var base = msgsLen();
+            var fdBefore = safe(function () { return window.featureData || null; }, null);
+            var started = nowMs();
+            var timer = setInterval(function () {
+                try {
+                    var elapsed = nowMs() - started;
+                    if (elapsed > 20000) { clearInterval(timer); T3.watching = false; return; }
+                    var fdNow = safe(function () { return window.featureData || null; }, null);
+                    /* 真的重置了会有两个铁证：featureData 被整体换新（clearAllData 里 featureData = getFeatureDefaults()）
+                     * 或聊天记录由非空变空。用户点了取消则两个都不出现 → 镜像一律不动。 */
+                    var identityChanged = !!(fdBefore && fdNow && fdNow !== fdBefore);
+                    var emptied = (base > 0 && msgsLen() === 0);
+                    var unknown = (!fdBefore) && base < 0;      // 两个信号都拿不到：按已确认重置处理
+                    var happened = identityChanged || emptied || (unknown && elapsed > 3000);
+                    if (!happened) return;
+                    clearInterval(timer);
+                    T3.watching = false;
+                    schedulePurge();
+                } catch (e) {}
+            }, 250);
+        } catch (e) { T3.watching = false; }
+    }
+
+    function hookResetButton() {
+        try {
+            if (T3.hooked) return true;
+            var btn = byId('clearAllDataBtn');
+            if (!btn || typeof btn.addEventListener !== 'function') return false;
+            /* 原监听先执行（发确认框），本监听只负责「等它真的重置完」再清镜像 */
+            btn.addEventListener('click', function () { onResetClick(); }, false);
+            T3.hooked = true;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* =====================================================================
+     * 任务 4：自愈不复活「用户刚刚主动删掉」的图片
+     *   1) 每 1.2 秒只读对比一次 featureData：头像库 / 首页背景「由非空变空」= 用户主动删除，记 10 分钟；
+     *   2) 删除发生后立刻把删除同步进两份镜像（appData 镜像 + imgBackup 图片备份），
+     *      这样哪怕自愈函数是从模块自己的 60 秒定时器里跑的（拿不到 window 包装），也没图可复活；
+     *   3) 再包一层 window.initStorageSlim / window.storageSlimRun：最近 10 分钟删过时，
+     *      本轮让自愈看不到镜像（Storage.prototype.getItem 临时返回 null）→「本轮不恢复」。
+     *   真丢失（首次启动 / 镜像有而主存储没有）时没有任何删除事件，两条路径都照常恢复。
+     * ===================================================================== */
+    var DELETE_WINDOW = 10 * 60 * 1000;
+
+    var T4 = {
+        snapshot: null,
+        lastDeleteAt: 0,
+        pollTimer: null,
+        suppressDepth: 0,
+        getItemPatched: false,
+        slimWrapped: false
+    };
+
+    function snapOf(fd) {
+        var out = { mine: 0, partner: 0, curMine: '', curPartner: '', home: '', together: '' };
+        try {
+            var lib = (fd && fd.avatarLib) || {};
+            out.mine = Array.isArray(lib.mine) ? lib.mine.length : 0;
+            out.partner = Array.isArray(lib.partner) ? lib.partner.length : 0;
+            out.curMine = s(lib.currentMine);
+            out.curPartner = s(lib.currentPartner);
+            out.home = s(fd && fd.homePageBg && fd.homePageBg.image);
+            out.together = s(fd && fd.togetherBg && fd.togetherBg.image);
+        } catch (e) {}
+        return out;
+    }
+
+    function recentDelete() {
+        return T4.lastDeleteAt > 0 && (nowMs() - T4.lastDeleteAt) < DELETE_WINDOW;
+    }
+
+    /* 把「已经删掉」的状态写进两份镜像：之后任何自愈都读不到被删的图 */
+    function syncMirrors() {
+        var fd = getFeatureData();
+        if (!fd) return false;
+        var lib = (fd.avatarLib && typeof fd.avatarLib === 'object') ? fd.avatarLib : {};
+        var home = fd.homePageBg || {};
+        var together = fd.togetherBg || {};
+
+        /* 1) 图片专用备份 imgBackup：只同步图片字段，其它（字卡 / 表情 / 设置）原样保留 */
+        try {
+            var rawImg = window.localStorage.getItem(KEY_IMG);
+            if (rawImg) {
+                var ib = JSON.parse(rawImg) || {};
+                if (ib.a || lib.mine || lib.partner) {
+                    ib.a = {
+                        mine: Array.isArray(lib.mine) ? lib.mine.slice() : [],
+                        partner: Array.isArray(lib.partner) ? lib.partner.slice() : [],
+                        currentMine: s(lib.currentMine),
+                        currentPartner: s(lib.currentPartner)
+                    };
+                }
+                if (ib.h || s(home.image)) ib.h = { image: s(home.image), color: home.color, overlay: home.overlay };
+                if (ib.t || s(together.image)) ib.t = { image: s(together.image), color: together.color, overlay: together.overlay };
+                ib.at = nowMs();
+                window.localStorage.setItem(KEY_IMG, JSON.stringify(ib));
+            }
+        } catch (e) {
+            try { window.localStorage.removeItem(KEY_IMG); } catch (e1) {}
+        }
+
+        /* 2) 主镜像 appData：只改 featureData 里那几处图片字段，其余数据一律不动 */
+        try {
+            var rawApp = window.localStorage.getItem(KEY_APP);
+            if (rawApp) {
+                var parsed = JSON.parse(rawApp);
+                if (parsed && typeof parsed === 'object') {
+                    var pf = (parsed.featureData && typeof parsed.featureData === 'object') ? parsed.featureData : null;
+                    if (pf) {
+                        if (pf.avatarLib && typeof pf.avatarLib === 'object') {
+                            pf.avatarLib.mine = Array.isArray(lib.mine) ? lib.mine.slice() : [];
+                            pf.avatarLib.partner = Array.isArray(lib.partner) ? lib.partner.slice() : [];
+                            pf.avatarLib.currentMine = s(lib.currentMine);
+                            pf.avatarLib.currentPartner = s(lib.currentPartner);
+                        }
+                        if (pf.homePageBg && typeof pf.homePageBg === 'object') pf.homePageBg.image = s(home.image);
+                        if (pf.togetherBg && typeof pf.togetherBg === 'object') pf.togetherBg.image = s(together.image);
+                        window.localStorage.setItem(KEY_APP, JSON.stringify(parsed));
+                    }
+                }
+            }
+        } catch (e2) {
+            /* 写不进去（多半是配额满了）→ 宁可删掉这份镜像，也不能留下会被复活的旧图 */
+            try { window.localStorage.removeItem(KEY_APP); } catch (e3) {}
+        }
+        return true;
+    }
+
+    function onUserDelete(fields) {
+        try {
+            T4.lastDeleteAt = nowMs();
+            try { window.localStorage.setItem(KEY_DEL, String(T4.lastDeleteAt)); } catch (e) {}
+            syncMirrors();
+            safe(function () { if (window.__fxDebug && window.__fxDebug.onDelete) window.__fxDebug.onDelete(fields); });
+        } catch (e) {}
+    }
+
+    function pollDeletes() {
+        try {
+            var fd = getFeatureData();
+            if (!fd) return;
+            var cur = snapOf(fd);
+            var prev = T4.snapshot;
+            T4.snapshot = cur;
+            if (!prev) return;                                  // 第一次只记基线
+            var hit = [];
+            if (prev.mine > 0 && cur.mine === 0) hit.push('avatarLib.mine');
+            if (prev.partner > 0 && cur.partner === 0) hit.push('avatarLib.partner');
+            if (prev.curMine && !cur.curMine) hit.push('avatarLib.currentMine');
+            if (prev.curPartner && !cur.curPartner) hit.push('avatarLib.currentPartner');
+            if (prev.home && !cur.home) hit.push('homePageBg.image');
+            if (prev.together && !cur.together) hit.push('togetherBg.image');
+            if (hit.length) onUserDelete(hit);
+        } catch (e) {}
+    }
+
+    /* 只读地给 Storage.prototype.getItem 打补丁：仅在「包住自愈调用」的那一小段里让镜像读不到 */
+    function patchStorageGetItem() {
+        if (T4.getItemPatched) return true;
+        try {
+            var ls = window.localStorage;
+            var proto = ls && (Object.getPrototypeOf ? Object.getPrototypeOf(ls) : ls.__proto__);
+            if (!proto || typeof proto.getItem !== 'function') return false;
+            var orig = proto.getItem;
+            if (orig[FLAG + 'Get']) { T4.getItemPatched = true; return true; }
+            var patched = function (key) {
+                try {
+                    if (T4.suppressDepth > 0 && recentDelete() && (key === KEY_APP || key === KEY_IMG) && this === ls) {
+                        return null;                       // 本轮自愈看不到镜像 → 不恢复
+                    }
+                } catch (e) {}
+                return orig.apply(this, arguments);
+            };
+            patched[FLAG + 'Get'] = true;
+            patched.__fxOriginal = orig;
+            proto.getItem = patched;
+            T4.getItemPatched = true;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function wrapSlimEntry(name) {
+        try {
+            var orig = window[name];
+            if (typeof orig !== 'function') return false;
+            if (orig[FLAG + 'Slim']) return true;
+            var wrapped = function () {
+                var suppress = recentDelete();
+                var ret;
+                if (suppress) { patchStorageGetItem(); T4.suppressDepth++; }
+                try { ret = orig.apply(this, arguments); }
+                catch (e) { ret = undefined; }
+                finally {
+                    if (suppress) T4.suppressDepth = Math.max(0, T4.suppressDepth - 1);
+                }
+                return ret;
+            };
+            wrapped[FLAG + 'Slim'] = true;
+            wrapped.__fxOriginal = orig;
+            window[name] = wrapped;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function initSlimGuard() {
+        /* 两个入口都要尝试（不能短路，否则其中一个不存在时另一个就装不上） */
+        var a = false, b = false;
+        try { a = wrapSlimEntry('initStorageSlim'); } catch (e) { a = false; }
+        try { b = wrapSlimEntry('storageSlimRun'); } catch (e) { b = false; }
+        var ok = !!(a || b);
+        try { patchStorageGetItem(); } catch (e) {}
+        if (!T4.pollTimer) {
+            try { T4.pollTimer = setInterval(function () { safe(pollDeletes); }, 1200); } catch (e) {}
+            safe(pollDeletes);                                       // 立刻记一次基线
+        }
+        T4.slimWrapped = ok;
+        return ok;
+    }
+
+    /* =====================================================================
+     * 初始化（幂等；任何一步失败都只是该功能降级，不影响页面）
+     * ===================================================================== */
+    function initFixFeature() {
+        var status = { version: VERSION };
+        status.askPayHook = safe(wrapAskPartnerPay, false);
+        status.askClickHook = safe(hookPayClick, false);
+        status.rejectTitleObserver = safe(observeChat, false);
+        status.imageCompressHook = safe(hookImageInput, false);
+        status.resetHook = safe(hookResetButton, false);
+        status.slimGuard = safe(initSlimGuard, false);
+        return status;
+    }
+
+    window.initFixFeature = initFixFeature;
+
+    /* 自检 / 调试用的只读出口（全部 fx 前缀，不与主程序冲突） */
+    window.fxDebug = {
+        version: VERSION,
+        init: initFixFeature,
+        /* T1 */
+        beginAsk: beginAsk,
+        askTitle: ASK_TITLE,
+        paidTitle: PAID_TITLE,
+        rejectTitle: REJECT_TITLE,
+        fixRejectTitles: fixRejectTitles,
+        pendingAsk: function () { return T1.pending; },
+        /* T2 */
+        needCompress: needCompress,
+        downscaleToJpeg: downscaleToJpeg,
+        dataUrlBytes: dataUrlBytes,
+        dataUrlToFile: dataUrlToFile,
+        compressFile: function (file, cb) {
+            readAsDataUrl(file, function (src) {
+                if (!src) { cb('', ''); return; }
+                downscaleToJpeg(src, function (jpeg) { cb(jpeg, src); });
+            });
+        },
+        /* T3 */
+        purgeMirrors: purgeMirrors,
+        /* T4 */
+        pollDeletes: pollDeletes,
+        syncMirrors: syncMirrors,
+        recentDelete: recentDelete,
+        lastDeleteAt: function () { return T4.lastDeleteAt; },
+        suppressDepth: function () { return T4.suppressDepth; },
+        onDelete: null
+    };
+
+    /* 自举：脚本一进来就装，DOM 就绪后再补一次；之后 300ms / 1.2s / 3s 再补（等晚挂载的模块） */
+    var booted = false;
+    function boot() {
+        try { initFixFeature(); } catch (e) {}
+        if (booted) return;
+        booted = true;
+        [300, 1200, 3000, 6000].forEach(function (d) {
+            setTimeout(function () { try { initFixFeature(); } catch (e) {} }, d);
+        });
+    }
+    try {
+        if (document && document.readyState === 'loading' && typeof document.addEventListener === 'function') {
+            document.addEventListener('DOMContentLoaded', boot, false);
+            boot();                          // 先装一遍（部分接口已就绪）
+        } else {
+            boot();
+        }
+    } catch (e) {
+        try { boot(); } catch (e2) {}
+    }
+})();
+
+})();
 /* ===== 功能模块：spec（独立作用域） ===== */
 (function(){
 
