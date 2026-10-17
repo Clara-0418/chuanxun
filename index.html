@@ -7263,6 +7263,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .pay2-card .pay2-card-foot { margin-top: 14px !important; }
         .pay2-card .pay2-card-tag { margin-top: 10px !important; }
 
+        /* ===== 代付 / 送礼 卡片：再拉长一档 ===== */
+        .pay2-card { min-height: 200px !important; padding-top: 18px !important; padding-bottom: 12px !important; }
+        .pay2-card .pay2-card-title { margin-bottom: 16px !important; font-size: 17px !important; }
+        .pay2-card .pay2-card-body { padding: 20px 0 !important; }
+        .pay2-card .pay2-card-icon { width: 68px !important; height: 68px !important; }
+        .pay2-card .pay2-card-price { font-size: 21px !important; }
+        .pay2-card .pay2-card-foot { margin-top: 18px !important; }
+        .pay2-card .pay2-card-tag { margin-top: 14px !important; font-size: 13px !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -8826,6 +8835,22 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         // 同步写一份 localStorage 镜像（含图片）：这是"后台被杀"时唯一能恢复的来源。
                         // 写不下时按优先级腾空间：先丢最旧的消息保住图片/设置；实在不行才降级成无图镜像。
                         const __mk = getStorageKey('appData');
+                        // 图片专用备份：只存图片字段（体积小），不受 5MB 主镜像裁剪影响 —— 这是图片不丢的最后一道保险
+                        try {
+                            var __imgBak = {
+                                a: (featureData && featureData.avatarLib) || null,
+                                h: (featureData && featureData.homePageBg) || null,
+                                t: (featureData && featureData.togetherBg) || null,
+                                l: (featureData && featureData.loveDiary && featureData.loveDiary.bg) || null,
+                                c: (featureData && featureData.companyDiary && featureData.companyDiary.bg) || null,
+                                p: (featureData && featureData.profile) || null,
+                                s: (settings && settings.chatBgImage) || '',
+                                k: (typeof stickerLibrary !== 'undefined' && stickerLibrary) || null,
+                                m: (typeof myStickerLibrary !== 'undefined' && myStickerLibrary) || null,
+                                at: Date.now()
+                            };
+                            window.localStorage.setItem(getStorageKey('imgBackup'), JSON.stringify(__imgBak));
+                        } catch (e) {}
                         const __mirNow = Date.now();
                         const __mirForce = !!(typeof document !== 'undefined' && document.hidden);
                         const __mirSkip = !__mirForce && (__mirNow - lastMirrorAt < 4000);   // 节流：图片在 IndexedDB，镜子只是保险
@@ -18893,7 +18918,7 @@ w.specFeatureInternal = {
     }
 
     function check() {
-        if (done) return;
+        /* 允许重复执行：图片自愈必须是周期性的，压缩本身是幂等的 */
         var fd = window.featureData;
         if (!fd) return;
         done = true;
@@ -18907,6 +18932,28 @@ w.specFeatureInternal = {
                 var plib = pfd.avatarLib || {};
                 var lib = fd.avatarLib || (fd.avatarLib = { mine: [], partner: [] });
                 var restore = false;
+                // 优先从"图片专用备份"恢复（比主镜像更可靠，永远不会因为配额被裁掉）
+                try {
+                    var rawImg = window.localStorage.getItem('CHAT_APP_V13_imgBackup');
+                    if (rawImg) {
+                        var ib = JSON.parse(rawImg) || {};
+                        var lib2 = fd.avatarLib || (fd.avatarLib = { mine: [], partner: [] });
+                        if (ib.a) {
+                            if (ib.a.mine && ib.a.mine.length && (!lib2.mine || !lib2.mine.length)) { lib2.mine = ib.a.mine.slice(); restore = true; }
+                            if (ib.a.partner && ib.a.partner.length && (!lib2.partner || !lib2.partner.length)) { lib2.partner = ib.a.partner.slice(); restore = true; }
+                            if (ib.a.currentMine && !lib2.currentMine) { lib2.currentMine = ib.a.currentMine; restore = true; }
+                            if (ib.a.currentPartner && !lib2.currentPartner) { lib2.currentPartner = ib.a.currentPartner; restore = true; }
+                        }
+                        if (ib.h && ib.h.image && (!fd.homePageBg || !fd.homePageBg.image)) { fd.homePageBg = ib.h; restore = true; }
+                        if (ib.t && ib.t.image && (!fd.togetherBg || !fd.togetherBg.image)) { fd.togetherBg = ib.t; restore = true; }
+                        if (ib.l && ib.l.image) { var ld2 = fd.loveDiary || (fd.loveDiary = {}); if (!ld2.bg || !ld2.bg.image) { ld2.bg = ib.l; restore = true; } }
+                        if (ib.c && ib.c.image) { var cd2 = fd.companyDiary || (fd.companyDiary = {}); if (!cd2.bg || !cd2.bg.image) { cd2.bg = ib.c; restore = true; } }
+                        if (ib.p) { var pr2 = fd.profile || (fd.profile = {}); if (ib.p.cover && !pr2.cover) { pr2.cover = ib.p.cover; restore = true; } if (ib.p.avatar && !pr2.avatar) { pr2.avatar = ib.p.avatar; restore = true; } }
+                        if (ib.s && (!window.settings || !window.settings.chatBgImage)) { try { window.settings.chatBgImage = ib.s; } catch (e) {} }
+                        if (ib.k && ib.k.length && (!window.stickerLibrary || !window.stickerLibrary.length)) { try { window.stickerLibrary = ib.k.slice(); restore = true; } catch (e) {} }
+                        if (ib.m && ib.m.length && (!window.myStickerLibrary || !window.myStickerLibrary.length)) { try { window.myStickerLibrary = ib.m.slice(); restore = true; } catch (e) {} }
+                    }
+                } catch (e) {}
                 if (plib.mine && plib.mine.length && (!lib.mine || !lib.mine.length)) { lib.mine = plib.mine.slice(); restore = true; }
                 if (plib.partner && plib.partner.length && (!lib.partner || !lib.partner.length)) { lib.partner = plib.partner.slice(); restore = true; }
                 if (typeof plib.currentMine === 'string' && plib.currentMine && !lib.currentMine) { lib.currentMine = plib.currentMine; restore = true; }
@@ -19020,7 +19067,7 @@ w.specFeatureInternal = {
 
     window.initStorageSlim = check;
     window.storageSlimRun = check;
-    try { setTimeout(check, 3500); } catch (e) {}
+    try { setTimeout(check, 3000); setInterval(check, 8000); } catch (e) {}
 })();})();
 /* ===== 功能模块：hwset（独立作用域） ===== */
 
