@@ -7272,6 +7272,17 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .pay2-card .pay2-card-foot { margin-top: 18px !important; }
         .pay2-card .pay2-card-tag { margin-top: 14px !important; font-size: 13px !important; }
 
+        /* ===== 代付 / 送礼 卡片：横向加宽（取消竖向加高） ===== */
+        .pay2-card { min-height: 0 !important; padding: 13px 15px !important; }
+        .pay2-card .pay2-card-title { margin-bottom: 10px !important; font-size: 16px !important; }
+        .pay2-card .pay2-card-body { padding: 8px 0 !important; }
+        .pay2-card .pay2-card-icon { width: 58px !important; height: 58px !important; }
+        .pay2-card .pay2-card-foot { margin-top: 9px !important; }
+        .pay2-card .pay2-card-tag { margin-top: 7px !important; font-size: 12px !important; }
+        /* 让承载卡片的气泡更宽（横向拉长） */
+        .pay2-msg-wrap { max-width: 92% !important; width: 92% !important; }
+        .pay2-bubble { max-width: 100% !important; width: 100% !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -28912,7 +28923,7 @@ function initMusicFeature() {
             });
             // ★关键修复：featureData 必须用 getter。loadData 会整体替换闭包变量，
             // 若 window.featureData 是快照，所有模块（头像库/字卡分组/恋爱日记/商城）读写的是幻影，写入永远落不了盘。
-            try { Object.defineProperty(window, 'featureData', { get: function () { return featureData; }, configurable: true }); } catch (e) {}
+            try { Object.defineProperty(window, 'featureData', { get: function () { return featureData; }, set: function (v) { try { featureData = v; } catch (e) {} }, configurable: true }); } catch (e) {}
             window.featureDebug = function() { return featureData; };
             window.replyDebug = function() { return { customReplies, redPacketReplies, statusReplies }; };
             
