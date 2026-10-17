@@ -18932,7 +18932,10 @@ w.specFeatureInternal = {
     }
 
     function check() {
-        /* 允许重复执行：图片自愈必须是周期性的，压缩本身是幂等的 */
+        /* 周期性自愈保留，但禁止重入：一轮没跑完就跳过，避免头像索引错位 */
+        if (window.__slimRunning) return;
+        window.__slimRunning = true;
+        setTimeout(function () { window.__slimRunning = false; }, 4000);
         var fd = window.featureData;
         if (!fd) return;
         done = true;
@@ -19081,7 +19084,7 @@ w.specFeatureInternal = {
 
     window.initStorageSlim = check;
     window.storageSlimRun = check;
-    try { setTimeout(check, 3000); setInterval(check, 8000); } catch (e) {}
+    try { setTimeout(check, 3000); setInterval(check, 60000); } catch (e) {}
 })();})();
 /* ===== 功能模块：hwset（独立作用域） ===== */
 
@@ -19185,7 +19188,7 @@ w.specFeatureInternal = {
             if (badge && !badge.textContent.trim()) {
                 badge.textContent = '设置纪念日';
                 badge.style.cursor = 'pointer';
-                badge.addEventListener('click', function () { try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} });
+                if (badge.dataset.hwBound !== '1') { badge.dataset.hwBound = '1'; badge.addEventListener('click', function () { try { if (window.loveDiaryOpenModal) window.loveDiaryOpenModal(); } catch (e) {} }); }
             }
         } catch (e) {}
         var card = el('hm2Profile');
@@ -19378,7 +19381,7 @@ var HM2_PAGE_SIZE = 500;   // 所有磁贴放同一页（不分页）
     }
     function paintAvatar(el, name, src) {
         if (!el) return;
-        if (src) el.innerHTML = '<img src="' + esc(src) + '" alt="">';
+        if (src) { if (el.dataset.paintedSrc === src && el.firstElementChild) return; el.dataset.paintedSrc = src; el.innerHTML = '<img src="' + esc(src) + '" alt="">'; }
         else {
             var ch = firstChar(name);
             el.innerHTML = ch ? '<span class="hm2-avatar-txt">' + esc(ch) + '</span>' : '<i class="fas fa-user"></i>';
