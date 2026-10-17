@@ -8837,6 +8837,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         const __mk = getStorageKey('appData');
                         // 图片专用备份：只存图片字段（体积小），不受 5MB 主镜像裁剪影响 —— 这是图片不丢的最后一道保险
                         try {
+                            var __ibNow = Date.now();
+                            if (!window.__lastImgBakAt || __ibNow - window.__lastImgBakAt > 4000 || (typeof document !== 'undefined' && document.hidden)) {
+                            window.__lastImgBakAt = __ibNow;
                             var __imgBak = {
                                 a: (featureData && featureData.avatarLib) || null,
                                 h: (featureData && featureData.homePageBg) || null,
@@ -8850,6 +8853,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                                 at: Date.now()
                             };
                             window.localStorage.setItem(getStorageKey('imgBackup'), JSON.stringify(__imgBak));
+                            }
                         } catch (e) {}
                         const __mirNow = Date.now();
                         const __mirForce = !!(typeof document !== 'undefined' && document.hidden);
@@ -13339,7 +13343,17 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 setTimeout(() => {
                     if (uiBooted) return;
                     storageSlow = true;
-                    bootUI();   // 仍然不置 dataLoaded：读回前禁止保存，避免覆盖真数据
+                    // 存储层卡住：先用 localStorage 镜像顶上，再解除写入闸门（否则整场会话零写入，刷新全丢）
+                    try {
+                        var __m = readLocalMirror();
+                        if (__m && Array.isArray(__m.messages)) {
+                            messages = __m.messages.map(function (x) { return Object.assign({}, x, { timestamp: x.timestamp ? new Date(x.timestamp) : new Date() }); });
+                            if (__m.settings && typeof __m.settings === 'object') Object.assign(settings, __m.settings);
+                            if (__m.featureData && typeof __m.featureData === 'object') { featureData = __m.featureData; normalizeFeatureData(); }
+                        }
+                    } catch (e) {}
+                    dataLoaded = true;
+                    bootUI();
                 }, 8000);
             }
 
@@ -19054,7 +19068,7 @@ w.specFeatureInternal = {
                     try {
                         var __mb = (JSON.stringify(window.featureData || {}).length / 1048576);
                         if (window.localStorage) { __mb += (String(window.localStorage.getItem("CHAT_APP_V13_appData") || "").length / 1048576); }
-                        notify("数据占用约 " + __mb.toFixed(2) + " MB" + (__mb > 4 ? "（接近上限，图片会存不住）" : ""), __mb > 4 ? "warning" : "info");
+                        if (!window.__storageReportDone) { window.__storageReportDone = true; notify("数据占用约 " + __mb.toFixed(2) + " MB" + (__mb > 4 ? "（接近上限，图片会存不住）" : ""), __mb > 4 ? "warning" : "info"); }
                     } catch (e) {}
                     if (changed) {
                         try { if (typeof saveData === 'function') saveData(); } catch (e) {}
@@ -28893,6 +28907,9 @@ function initMusicFeature() {
                     if (!cur) window[pair[0]] = pair[1];
                 } catch (e) {}
             });
+            // ★关键修复：featureData 必须用 getter。loadData 会整体替换闭包变量，
+            // 若 window.featureData 是快照，所有模块（头像库/字卡分组/恋爱日记/商城）读写的是幻影，写入永远落不了盘。
+            try { Object.defineProperty(window, 'featureData', { get: function () { return featureData; }, configurable: true }); } catch (e) {}
             window.featureDebug = function() { return featureData; };
             window.replyDebug = function() { return { customReplies, redPacketReplies, statusReplies }; };
             
