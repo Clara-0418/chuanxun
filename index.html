@@ -13658,6 +13658,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 st.partner.weather = { emoji: pw.emoji, text: pw.text + ' ' + getRandomInt(lo, hi) + '°' };
     } catch (e) { st.partner.weather = st.partner.weather || { emoji: '☀️', text: '晴 22°' }; }
                 st.partner.mood = getRandomItem(MOOD_PRESETS) || { emoji: '😊', text: '开心' };
+    // 梦角足迹：跟着状态更新一起随机换地点（45% 概率，避免太跳）
+    try { if (Math.random() < 0.45) { var _sp = ['家','公司','地铁上','咖啡馆','公园','超市','健身房','夜市','江边','海边']; st.partner.spot = getRandomItem(_sp) || st.partner.spot || '家'; } } catch (e) {}
                 st.partner.updatedAt = Date.now();
                 saveData();
                 try { statusRender(); } catch (e) {}
