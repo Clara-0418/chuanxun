@@ -14144,6 +14144,42 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：crashlog ===== */
+/* ===== 崩溃守卫 + 崩溃日志（长按顶部标语可查看） ===== */
+(function () {
+    var KEY = 'CHAT_APP_V13_crashLog';
+    function log(kind, msg, extra) {
+        try {
+            var arr = [];
+            try { arr = JSON.parse(window.localStorage.getItem(KEY) || '[]') || []; } catch (e) { arr = []; }
+            arr.push({ t: Date.now(), kind: kind, msg: String(msg || '').slice(0, 260), extra: String(extra || '').slice(0, 160) });
+            if (arr.length > 8) arr = arr.slice(-8);
+            window.localStorage.setItem(KEY, JSON.stringify(arr));
+        } catch (e) {}
+    }
+    try { window.addEventListener('error', function (e) { log('err', e && e.message, (e && e.lineno) + ':' + (e && e.colno)); }); } catch (e) {}
+    try { window.addEventListener('unhandledrejection', function (e) { try { log('rej', (e.reason && (e.reason.message || e.reason)) || 'unknown', ''); } catch (x) {} }); } catch (e) {}
+    function showLog() {
+        var raw = '（无记录）';
+        try { raw = window.localStorage.getItem(KEY) || '（无记录）'; } catch (e) { raw = '（读不到本地存储）'; }
+        try { if (typeof window.iosAlert === 'function') { window.iosAlert(raw, { title: '最近崩溃日志' }); return; } } catch (e) {}
+        try { alert(raw); } catch (e) {}
+    }
+    window.__showCrashLog = showLog;
+    try {
+        setTimeout(function () {
+            var m = document.getElementById('headerMotto');
+            if (!m || m.dataset.crashBound === '1') return;
+            m.dataset.crashBound = '1';
+            var timer = null;
+            var clear = function () { if (timer) { clearTimeout(timer); timer = null; } };
+            m.addEventListener('touchstart', function () { clear(); timer = setTimeout(showLog, 1500); }, { passive: true });
+            m.addEventListener('touchend', clear);
+            m.addEventListener('touchmove', clear);
+            m.addEventListener('dblclick', showLog);
+        }, 900);
+    } catch (e) {}
+})();
 /* ===== 功能模块：dockh ===== */
 /* ===== Dock 高度实测（写入 --hm2-dock-h） ===== */
 (function () {
