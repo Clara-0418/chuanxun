@@ -4796,6 +4796,18 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：mem ===== */
+/* ===== 功能模块：mem（聊天图片外置 IndexedDB + 按需加载） =====
+ * 只做两件事：把 base64 图片挪出内存；渲染时按需把图取回，离开可视区再释放。
+ * 选择器统一 mem- 前缀；配色全部走主题变量，深色模式自动跟随。 */
+.mem-img-shell { position: relative; }
+.mem-img-shell > img { display: block; border-radius: 8px; }
+img.mem-img-missing {
+    background: var(--secondary-bg, #f1f2f5) !important;
+    border: 1px dashed var(--border-color, #d8dbe2) !important;
+}
+
+
 /* ===== 功能模块：fx ===== */
 /* fx 模块：只补一处「拒绝代付」卡片标题的着色（其余观感完全沿用 pay2 原样式；配色全走主题变量，深色模式自动跟随） */
 #chatContainer .pay2-card-title.fx-pay-reject {
@@ -7546,6 +7558,10 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：mem ===== -->
+<!-- 功能模块：mem —— 无需额外 DOM：占位块由脚本就地注入图片气泡内部 -->
+
+
 <!-- ===== 功能模块：fx ===== -->
 <!-- fx 模块：不新增任何 DOM 结构（代付的两张卡片完全复用 pay2 的 product 卡片渲染；图片压缩 / 存储修复均无界面） -->
 
@@ -13488,7 +13504,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14144,6 +14160,1085 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：mem（独立作用域） ===== */
+(function(){
+
+/* ===== 功能模块：mem（聊天图片外置 IndexedDB + 按需加载） =====
+ * 背景：messages[].image 是 base64 dataURL，长会话常驻内存 → iOS 内存超限被系统强杀。
+ * 方案：图片写进独立的 IndexedDB（chat_img_db / store: imgs），内存里只留 imageId + hasImage。
+ * 红线：必须 putImage 成功 + getImage 回读“内容完全一致”，才允许把 m.image 置空；
+ *       任何一步失败都保持原样（也不设置 imageId），绝不出现“内存删了、库里没存上”。
+ * 约束：不改主程序函数体，只在 addMessage / renderMessages 外面包一层
+ *       （先调用原函数、透传返回值、异常兜住、只包一层）。
+ */
+(function () {
+    'use strict';
+
+    if (window.__memFeatureBooted) return;   // 同一页面重复注入时只跑一份
+    window.__memFeatureBooted = true;
+
+    var DB_NAME = 'chat_img_db';
+    var DB_VER = 1;
+    var STORE = 'imgs';
+    var BATCH_SIZE = 20;        // 每批外置张数
+    var BATCH_GAP = 200;        // 批间隔（ms）
+    var MAX_CONCURRENT = 3;     // 渲染回填并发上限
+    var PRELOAD_PX = 320;       // 可视区外预加载范围
+    var RELEASE_MS = 700;       // 离开可视区后延迟释放（防抖，避免快速滚动反复解码）
+
+    // 占位图：128×128 浅灰底 + 图片轮廓，几十字节，深色模式下也是“浅色占位块”
+    var PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">' +
+        '<rect width="128" height="128" rx="12" fill="#e8ebf0"/>' +
+        '<circle cx="64" cy="54" r="14" fill="#cdd4df"/>' +
+        '<path d="M28 108l26-30 16 18 12-14 18 26z" fill="#cdd4df"/></svg>');
+
+    var state = {
+        inited: false,
+        db: null,
+        dbOpening: null,
+        dbBroken: false,
+        storedCount: 0,
+        lastError: '',
+        fatal: false,            // 配额满等致命错误：暂停迁移，图继续留在内存
+        migrating: false,
+        migratePromise: null,
+        loading: 0,
+        queue: [],
+        tracked: []
+    };
+
+    var renderDepth = 0;
+    var evaluateTimer = null;
+    var hydrateTimer = null;
+    var readyTimer = null;
+    var readyTries = 0;
+    var observer = null;
+    var renderHookInstalled = false;
+    var io = null;              // IntersectionObserver：真机上用它判可视区，省掉滚动时逐个量 rect
+    var ioTried = false;
+
+    function log() { try { console.log.apply(console, ['[mem]'].concat(Array.prototype.slice.call(arguments))); } catch (e) {} }
+    function warn() { try { console.warn.apply(console, ['[mem]'].concat(Array.prototype.slice.call(arguments))); } catch (e) {} }
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function noop() {}
+
+    /* ============================================================
+     * 1. 主程序能力解析（优先闭包内函数，其次 window.*，全部容错）
+     * ============================================================ */
+    function getMessages() {
+        try { if (typeof messages !== 'undefined' && Array.isArray(messages)) return messages; } catch (e) {}
+        try { var v = window.messages; if (Array.isArray(v)) return v; } catch (e) {}
+        return [];
+    }
+    function getSaveData() {
+        try { if (typeof saveData === 'function') return saveData; } catch (e) {}
+        try { if (typeof window.saveData === 'function') return window.saveData; } catch (e) {}
+        return null;
+    }
+    function getRenderFn() {
+        try { if (typeof renderMessages === 'function') return renderMessages; } catch (e) {}
+        try { if (typeof window.renderMessages === 'function') return window.renderMessages; } catch (e) {}
+        return null;
+    }
+    function saveSoon() {
+        var fn = getSaveData();
+        if (!fn) return;
+        try { fn(); } catch (e) { warn('saveData 调用失败', e); }
+    }
+    function isHidden() {
+        try { return typeof document !== 'undefined' && !!document.hidden; } catch (e) { return false; }
+    }
+    // 真数据是否已从存储读回（闭包里有 dataLoaded 就用它，独立注入时退化为“非空即就绪”）
+    function dataReady() {
+        try { if (typeof dataLoaded !== 'undefined') return !!dataLoaded; } catch (e) {}
+        try { if (window.__memDataReady === true) return true; } catch (e) {}
+        return getMessages().length > 0;
+    }
+
+    /* ============================================================
+     * 2. IndexedDB 层：chat_img_db / imgs（独立库，不碰主存储）
+     * ============================================================ */
+    function idbFactory() {
+        try { return window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || null; } catch (e) { return null; }
+    }
+
+    function openDB() {
+        if (state.db) return Promise.resolve(state.db);
+        if (state.dbOpening) return state.dbOpening;
+        var factory = idbFactory();
+        if (!factory || typeof factory.open !== 'function') {
+            state.dbBroken = true;
+            return Promise.reject(new Error('indexeddb-unavailable'));
+        }
+        state.dbOpening = new Promise(function (resolve, reject) {
+            var req;
+            try { req = factory.open(DB_NAME, DB_VER); } catch (e) { reject(e); return; }
+            req.onupgradeneeded = function () {
+                try {
+                    var db = req.result;
+                    if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+                } catch (e) { warn('建表失败', e); }
+            };
+            req.onsuccess = function () {
+                var db = req.result;
+                try {
+                    db.onversionchange = function () {
+                        try { db.close(); } catch (e) {}
+                        state.db = null;
+                        state.dbOpening = null;
+                    };
+                } catch (e) {}
+                state.db = db;
+                resolve(db);
+            };
+            req.onerror = function () { reject(req.error || new Error('open-failed')); };
+            req.onblocked = function () { warn('IndexedDB 打开被其它标签页阻塞'); };
+        }).then(function (db) {
+            return db;
+        }, function (err) {
+            state.dbOpening = null;
+            state.dbBroken = true;
+            warn('IndexedDB 不可用，图片保持原样（不迁移、渲染走原路径）：', (err && err.message) || err);
+            throw err;
+        });
+        return state.dbOpening;
+    }
+
+    // 统一的单事务封装：fn(ctx) 里通过 ctx.set() 交回结果；tx.oncomplete 才算真正落库
+    function withStore(mode, fn) {
+        return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx, store, result, settled = false;
+                try {
+                    tx = db.transaction(STORE, mode);
+                    store = tx.objectStore(STORE);
+                } catch (e) { reject(e); return; }
+                var ctx = {
+                    store: store,
+                    set: function (v) { result = v; },
+                    fail: function (e) {
+                        if (settled) return;
+                        settled = true;
+                        try { tx.abort(); } catch (x) {}
+                        reject(e || new Error('op-failed'));
+                    }
+                };
+                try { fn(ctx); } catch (e) { ctx.fail(e); return; }
+                tx.oncomplete = function () { if (!settled) { settled = true; resolve(result); } };
+                tx.onerror = function () { if (!settled) { settled = true; reject(tx.error || new Error('tx-error')); } };
+                tx.onabort = function () { if (!settled) { settled = true; reject(tx.error || new Error('tx-abort')); } };
+            });
+        });
+    }
+
+    function isQuotaError(e) {
+        var s = '';
+        try { s = String((e && (e.name + ' ' + e.message)) || e); } catch (x) {}
+        return /quota|storage.*full|exceed/i.test(s);
+    }
+
+    // 写：整块 dataURL 存进去；同事务里先 get 一次，用于精确维护 storedCount
+    function putImage(id, dataUrl) {
+        var key = String(id == null ? '' : id);
+        if (!key || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image') !== 0) return Promise.resolve(false);
+        var payload = { id: key, data: dataUrl, size: dataUrl.length, at: Date.now() };
+        return withStore('readwrite', function (ctx) {
+            var req;
+            try { req = ctx.store.get(key); } catch (e) { ctx.fail(e); return; }
+            req.onsuccess = function () {
+                var existed = !!req.result;
+                ctx.set(existed);
+                try { ctx.store.put(payload); } catch (e) { ctx.fail(e); }
+            };
+            req.onerror = function () { ctx.fail(req.error || new Error('get-failed')); };
+        }).then(function (existed) {
+            if (!existed) state.storedCount += 1;
+            return true;
+        }, function (e) {
+            state.lastError = 'put:' + ((e && e.message) || e);
+            if (state.dbBroken) state.fatal = true;     // 库都打不开：整轮停手，别空转
+            if (isQuotaError(e)) {
+                state.fatal = true;
+                warn('IndexedDB 写入空间不足，暂停迁移（图片仍留在内存里，不会丢）');
+            }
+            return false;
+        });
+    }
+
+    // 读：返回 dataURL 字符串；任何异常都返回 null（渲染端退化为占位块，不报错）
+    function getImage(id) {
+        var key = String(id == null ? '' : id);
+        if (!key) return Promise.resolve(null);
+        return withStore('readonly', function (ctx) {
+            var req;
+            try { req = ctx.store.get(key); } catch (e) { ctx.fail(e); return; }
+            req.onsuccess = function () {
+                var r = req.result;
+                ctx.set(r && typeof r.data === 'string' ? r.data : null);
+            };
+            req.onerror = function () { ctx.fail(req.error || new Error('get-failed')); };
+        }).catch(function (e) {
+            state.lastError = 'get:' + ((e && e.message) || e);
+            return null;
+        });
+    }
+
+    function delImage(id) {
+        var key = String(id == null ? '' : id);
+        if (!key) return Promise.resolve(false);
+        return withStore('readwrite', function (ctx) {
+            var req;
+            try { req = ctx.store.get(key); } catch (e) { ctx.fail(e); return; }
+            req.onsuccess = function () {
+                ctx.set(!!req.result);
+                try { ctx.store.delete(key); } catch (e) { ctx.fail(e); }
+            };
+            req.onerror = function () { ctx.fail(req.error || new Error('get-failed')); };
+        }).then(function (existed) {
+            if (existed) state.storedCount = Math.max(0, state.storedCount - 1);
+            return !!existed;
+        }, function () { return false; });
+    }
+
+    function hasImage(id) {
+        return getImage(id).then(function (d) { return !!d; });
+    }
+
+    function countAll() {
+        return withStore('readonly', function (ctx) {
+            var req;
+            try { req = ctx.store.count(); } catch (e) { ctx.fail(e); return; }
+            req.onsuccess = function () { ctx.set(req.result || 0); };
+            req.onerror = function () { ctx.fail(req.error || new Error('count-failed')); };
+        }).catch(function () { return -1; });
+    }
+
+    function listKeys() {
+        return withStore('readonly', function (ctx) {
+            if (typeof ctx.store.getAllKeys !== 'function') { ctx.fail(new Error('no-getAllKeys')); return; }
+            var req;
+            try { req = ctx.store.getAllKeys(); } catch (e) { ctx.fail(e); return; }
+            req.onsuccess = function () { ctx.set(req.result || []); };
+            req.onerror = function () { ctx.fail(req.error || new Error('keys-failed')); };
+        }).catch(function () { return null; });
+    }
+
+    function refreshStoredCount() {
+        return countAll().then(function (n) {
+            if (typeof n === 'number' && n >= 0) state.storedCount = n;
+            return state.storedCount;
+        });
+    }
+
+    function requestPersist() {
+        try {
+            if (navigator.storage && typeof navigator.storage.persist === 'function') {
+                navigator.storage.persist().then(function (ok) {
+                    if (!ok) log('未获得持久化存储授权：长期不打开时系统仍可能清理 IndexedDB');
+                }, noop);
+            }
+        } catch (e) {}
+    }
+
+    /* ============================================================
+     * 3. 迁移：分批 + 间隔 + 快照校验；可断点续迁
+     * ============================================================ */
+    function genImageId() {
+        return 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    }
+    function isDataUrl(v) { return typeof v === 'string' && v.indexOf('data:image') === 0; }
+    function needsExternalize(m) {
+        return !!m && typeof m === 'object' && isDataUrl(m.image) && m.image !== PLACEHOLDER;
+    }
+    function needsRemoteImage(m) {
+        if (!m || typeof m !== 'object') return false;
+        if (!m.imageId || !m.hasImage) return false;
+        return !m.image || m.image === PLACEHOLDER;
+    }
+
+    /**
+     * 单条外置。返回 Promise<boolean>，只有“写成功 + 回读内容一致”才 true。
+     * 失败路径绝不改动 m.image / 不写 m.imageId。
+     */
+    function externalizeOne(m, depth) {
+        depth = depth || 0;
+        if (!needsExternalize(m)) return Promise.resolve(false);
+        var dataUrl = m.image;                    // 本次要落库的内容快照
+        var id = (typeof m.imageId === 'string' && m.imageId) ? m.imageId : genImageId();
+        return putImage(id, dataUrl).then(function (ok) {
+            if (!ok) return false;                // 写失败：原样保留
+            return getImage(id).then(function (back) {
+                if (back !== dataUrl) throw new Error('verify-mismatch');   // 回读不一致：不认账
+                if (m.image !== dataUrl) {
+                    // 等待期间被别的模块改过（例如图片瘦身重压）：以当前内存内容为准再走一遍
+                    if (depth < 2) return externalizeOne(m, depth + 1);
+                    return false;
+                }
+                m.imageId = id;                   // 到这里才动内存
+                m.hasImage = true;
+                m.image = '';
+                return true;
+            });
+        }).catch(function (e) {
+            state.lastError = 'ext:' + ((e && e.message) || e);
+            return false;
+        });
+    }
+
+    /**
+     * 分批迁移。已迁移的（image 已为空）天然跳过 → 天然支持断点续迁。
+     * opts: { batchSize, gap, force }
+     */
+    function migrate(opts) {
+        opts = opts || {};
+        if (state.migrating) return state.migratePromise;
+        if (state.dbBroken) {
+            return Promise.resolve({ scanned: 0, migrated: 0, failed: 0, total: getMessages().length, done: false, paused: true, reason: 'db-unavailable' });
+        }
+        state.migrating = true;
+
+        var summary = { scanned: 0, migrated: 0, failed: 0, total: 0, done: false, paused: false };
+        var resolveOuter;
+        state.migratePromise = new Promise(function (r) { resolveOuter = r; });
+
+        var list = getMessages();
+        summary.total = list.length;
+        var batch = Math.max(1, opts.batchSize || BATCH_SIZE);
+        var gap = (typeof opts.gap === 'number') ? opts.gap : BATCH_GAP;
+
+        (async function () {
+            var idx = 0;
+            var worked = 0;
+            try {
+                while (idx < list.length) {
+                    if (!opts.force && isHidden()) { summary.paused = true; break; }
+                    if (getMessages() !== list) { summary.paused = true; break; }  // 数组被 loadData 换掉：下次再来
+                    var m = list[idx];
+                    idx++;
+                    summary.scanned++;
+                    if (!needsExternalize(m)) continue;
+                    var ok = await externalizeOne(m);
+                    if (ok) {
+                        summary.migrated++;
+                        worked++;
+                    } else {
+                        summary.failed++;
+                        if (state.fatal) { summary.paused = true; break; }         // 配额满：停手，图还在内存
+                    }
+                    if (worked > 0 && worked % batch === 0) {
+                        await sleep(gap);
+                        if (!opts.force && isHidden()) { summary.paused = true; break; }
+                    }
+                }
+                summary.done = idx >= list.length;
+            } catch (e) {
+                state.lastError = 'migrate:' + ((e && e.message) || e);
+                summary.paused = true;
+            } finally {
+                state.migrating = false;
+            }
+            if (summary.migrated > 0) {
+                saveSoon();       // 迁移完成/暂停都落一次盘（已迁移的不会回退）
+                scheduleHydrate();  // 已在屏幕上的那几张 base64 也换成按需加载的 blob URL
+            }
+            if (summary.done) {
+                refreshStoredCount();
+                log('迁移完成：外置 ' + summary.migrated + ' 张 / 扫描 ' + summary.scanned + ' 条 / 失败 ' + summary.failed);
+            } else if (summary.migrated > 0) {
+                log('迁移暂停：本次外置 ' + summary.migrated + ' 张，下次继续（已迁移的跳过）');
+            }
+            resolveOuter(summary);
+        })();
+
+        return state.migratePromise;
+    }
+
+    /* ============================================================
+     * 4. 渲染按需加载：包装 renderMessages（占位 → 取回 → 填图）
+     * ============================================================ */
+    function isAttached(el) {
+        if (!el) return false;
+        if (typeof el.isConnected === 'boolean') return el.isConnected;
+        return !!el.parentNode;
+    }
+    function rectOf(el) {
+        try { return el.getBoundingClientRect(); } catch (e) { return null; }
+    }
+    function viewportHeight() {
+        try { return window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 800; }
+        catch (e) { return 800; }
+    }
+
+    // 渲染前：把“已外置但 image 为空”的消息临时补上占位 dataURL，
+    // 让主程序走原生的图片气泡分支（单击功能栏 / 双击看大图等逻辑全部保留）。
+    function primePlaceholders(list) {
+        var swapped = [];
+        for (var i = 0; i < list.length; i++) {
+            var m = list[i];
+            if (!m || typeof m !== 'object') continue;
+            if (!m.imageId || !m.hasImage) continue;
+            if (m.image) continue;
+            m.image = PLACEHOLDER;
+            swapped.push(m);
+        }
+        return swapped;
+    }
+    function unprimePlaceholders(swapped) {
+        for (var i = 0; i < swapped.length; i++) {
+            if (swapped[i] && swapped[i].image === PLACEHOLDER) swapped[i].image = '';
+        }
+    }
+
+    function installRenderHook() {
+        var fn = getRenderFn();
+        if (typeof fn !== 'function') return false;
+        if (fn.__memRenderWrapped) return true;
+        var wrapped = function () {
+            var swapped = [];
+            if (renderDepth === 0) {
+                try { swapped = primePlaceholders(getMessages()); } catch (e) {}
+            }
+            renderDepth++;
+            var ret;
+            try {
+                ret = fn.apply(this, arguments);
+            } finally {
+                renderDepth--;
+                if (renderDepth === 0) {
+                    try { unprimePlaceholders(swapped); } catch (e) {}
+                }
+            }
+            try { hydrate(); } catch (e) {}
+            return ret;
+        };
+        wrapped.__memRenderWrapped = true;
+        wrapped.__memOriginal = fn;
+        try { renderMessages = wrapped; } catch (e) {}      // 闭包内调用点全部走包装版
+        try { window.renderMessages = wrapped; } catch (e) {}
+        renderHookInstalled = true;
+        return true;
+    }
+
+    // 拿不到 renderMessages（独立脚本注入）时的兜底：盯住聊天容器，渲染完再补图
+    function installObserverFallback() {
+        if (observer || renderHookInstalled) return;
+        if (typeof MutationObserver !== 'function') return;
+        var root = null;
+        try { root = document.getElementById('chatContainer'); } catch (e) {}
+        if (!root) return;
+        try {
+            observer = new MutationObserver(function () { scheduleHydrate(); });
+            observer.observe(root, { childList: true, subtree: true });
+        } catch (e) { observer = null; }
+    }
+
+    function findMessageByWrapper(wrapper) {
+        var list = getMessages();
+        if (!list.length) return null;
+        var idx = wrapper && wrapper.dataset ? wrapper.dataset.idx : null;
+        var id = wrapper && wrapper.dataset ? wrapper.dataset.id : null;
+        if (idx !== null && idx !== undefined && idx !== '') {
+            var byIdx = list[Number(idx)];
+            if (byIdx && (id === null || id === undefined || String(byIdx.id) === String(id))) return byIdx;
+        }
+        if (id !== null && id !== undefined) {
+            for (var i = list.length - 1; i >= 0; i--) {
+                if (list[i] && String(list[i].id) === String(id)) return list[i];
+            }
+        }
+        return null;
+    }
+
+    // 兜底路径：主程序把这条消息渲染成了空气泡（因为 image 已置空），这里补一个 <img>
+    function ensureImg(wrapper, msg) {
+        var bubble = null;
+        try { bubble = wrapper.querySelector('.message-content-wrapper .message'); } catch (e) {}
+        if (!bubble) return null;
+        var img = null;
+        try { img = bubble.querySelector('img'); } catch (e) {}
+        if (img) return img;
+        if (msg.text || msg.product || msg.redPacket) return null;   // 有文字/商品卡：不改主程序排版
+        try {
+            bubble.dataset.memShell = '1';
+            if (bubble.classList && bubble.classList.add) bubble.classList.add('image-message', 'mem-img-shell');
+            bubble.innerHTML = '<img alt="" src="' + PLACEHOLDER + '">';   // 先显示浅色占位块，避免裂图
+            img = bubble.querySelector('img');
+            if (img) {
+                img.dataset.memShell = '1';
+                if (!bubble.dataset.memDbl) {
+                    bubble.dataset.memDbl = '1';
+                    bubble.addEventListener('dblclick', function (e) {
+                        var el = bubble.querySelector('img');
+                        if (!el) return;
+                        if (el.dataset && el.dataset.src) return;    // 有正式地址时交给主程序
+                        e.stopPropagation();
+                        openViewer(el);
+                    }, true);
+                }
+            }
+        } catch (e) { img = null; }
+        return img;
+    }
+
+    function openViewer(img) {
+        var rec = img && img.__mem;
+        var id = rec && rec.id;
+        if (!id) return;
+        getImage(id).then(function (dataUrl) {
+            if (!dataUrl) return;
+            try {
+                if (typeof window.viewImage === 'function') window.viewImage(dataUrl);
+                else if (typeof viewImage === 'function') viewImage(dataUrl);
+            } catch (e) {}
+        });
+    }
+
+    function track(img) {
+        if (!img || img.__memTracked) return;
+        img.__memTracked = true;
+        state.tracked.push(img);
+        var ob = ensureIO();
+        if (ob) { try { ob.observe(img); } catch (e) {} }
+    }
+
+    // IntersectionObserver 不可用时返回 null，滚动兜底走 evaluateVisibility
+    function ensureIO() {
+        if (ioTried) return io;
+        ioTried = true;
+        if (typeof IntersectionObserver !== 'function') return null;
+        var root = null;
+        try { root = document.getElementById('chatContainer'); } catch (e) {}
+        try {
+            io = new IntersectionObserver(function (entries) {
+                for (var i = 0; i < entries.length; i++) {
+                    var en = entries[i];
+                    var img = en.target;
+                    var rec = img && img.__mem;
+                    if (!rec) continue;
+                    if (en.isIntersecting) {
+                        if (rec.state === 'idle' || rec.state === 'released' || rec.state === 'missing' || rec.state === 'error') enqueue(img);
+                    } else if (rec.state === 'ready') {
+                        scheduleRelease(img);
+                    }
+                }
+            }, { root: root || null, rootMargin: PRELOAD_PX + 'px 0px ' + PRELOAD_PX + 'px 0px', threshold: 0 });
+        } catch (e) { io = null; }
+        return io;
+    }
+
+    function hydrate() {
+        var root = null;
+        try { root = document.getElementById('chatContainer'); } catch (e) {}
+        if (!root || !root.querySelectorAll) return 0;
+        var wrappers = null;
+        try { wrappers = root.querySelectorAll('.message-wrapper'); } catch (e) { return 0; }
+        var touched = 0;
+        for (var i = 0; i < wrappers.length; i++) {
+            var w = wrappers[i];
+            var msg = findMessageByWrapper(w);
+            if (!msg || !needsRemoteImage(msg)) continue;
+            var img = ensureImg(w, msg);
+            if (!img) continue;
+            var rec = img.__mem || (img.__mem = { id: null, state: 'idle', url: null, timer: null });
+            if (rec.id !== msg.imageId) {
+                if (rec.id) releaseImg(img, false);   // 换了图片 id：先放掉旧 blob URL
+                rec = img.__mem || (img.__mem = { id: null, state: 'idle', url: null, timer: null });
+                rec.id = msg.imageId;
+                rec.state = 'idle';
+            }
+            if (rec.state === 'idle' || rec.state === 'missing' || rec.state === 'error') {
+                track(img);
+                touched++;
+            }
+            // 主程序给“图文混排”消息渲染的 <img onclick="viewImage('占位')">：换成按 id 取真图
+            try {
+                var inline = img.getAttribute ? img.getAttribute('onclick') : null;
+                if (inline && inline.indexOf('viewImage') >= 0 && !img.__memOnclick) {
+                    img.__memOnclick = true;
+                    img.onclick = function (e) {
+                        if (e && e.preventDefault) e.preventDefault();
+                        var src = this.dataset && this.dataset.src;
+                        if (src) {
+                            try { if (typeof window.viewImage === 'function') window.viewImage(src); } catch (x) {}
+                            return false;
+                        }
+                        openViewer(this);
+                        return false;
+                    };
+                }
+            } catch (e) {}
+        }
+        try { sweep(); } catch (e) {}
+        evaluateVisibility();
+        return touched;
+    }
+
+    function scheduleHydrate() {
+        if (hydrateTimer) return;
+        hydrateTimer = setTimeout(function () { hydrateTimer = null; try { hydrate(); } catch (e) {} }, 40);
+    }
+
+    // 并发 3 的回填队列
+    function enqueue(img) {
+        var rec = img && img.__mem;
+        if (!rec || !rec.id) return;
+        if (rec.state === 'queued' || rec.state === 'loading' || rec.state === 'ready') return;
+        rec.state = 'queued';
+        rec.triedAt = Date.now();
+        try { img.dataset.memState = 'queued'; } catch (e) {}
+        state.queue.push(img);
+        pump();
+    }
+
+    function pump() {
+        while (state.loading < MAX_CONCURRENT && state.queue.length) {
+            var img = state.queue.shift();
+            var rec = img && img.__mem;
+            if (!img || !rec || !rec.id) continue;
+            if (!isAttached(img)) { rec.state = 'idle'; continue; }
+            state.loading++;
+            rec.state = 'loading';
+            loadInto(img).catch(noop).then(function () {
+                state.loading--;
+                pump();
+            });
+        }
+    }
+
+    function setImgSrc(img, src) {
+        try { img.src = src; } catch (e) {}
+    }
+    function setPlaceholder(img) {
+        try { img.src = PLACEHOLDER; } catch (e) {}
+    }
+    function revoke(url) {
+        try { if (url && typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(url); } catch (e) {}
+    }
+
+    // dataURL → Blob（同步，避免 fetch 依赖 CSP）；失败返回 null 时渲染端退回 dataURL
+    function dataUrlToBlob(dataUrl) {
+        try {
+            var comma = dataUrl.indexOf(',');
+            if (comma < 0) return null;
+            var head = dataUrl.slice(0, comma);
+            var body = dataUrl.slice(comma + 1);
+            if (head.indexOf(';base64') < 0) return null;
+            var mime = (head.match(/^data:([^;]+)/) || [])[1] || 'image/jpeg';
+            var bin = atob(body);
+            var len = bin.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+            return new Blob([bytes], { type: mime });
+        } catch (e) { return null; }
+    }
+    function toObjectUrl(dataUrl) {
+        try {
+            if (typeof Blob !== 'function') return null;
+            if (typeof URL === 'undefined' || !URL.createObjectURL) return null;
+            var blob = dataUrlToBlob(dataUrl);
+            if (!blob) return null;
+            return URL.createObjectURL(blob);
+        } catch (e) { return null; }
+    }
+
+    function loadInto(img) {
+        var rec = img.__mem || (img.__mem = {});
+        var id = rec.id;
+        return getImage(id).then(function (dataUrl) {
+            if (!isAttached(img) || rec.id !== id) return;     // 已被重新渲染/换图
+            if (!dataUrl) { markMissing(img); return; }
+            var url = toObjectUrl(dataUrl);
+            if (!url) {
+                // 不支持 blob URL：退回 dataURL（内容立即可用，内存略高）
+                rec.state = 'ready';
+                setImgSrc(img, dataUrl);
+                try {
+                    img.dataset.src = dataUrl;
+                    img.dataset.memState = 'ready';
+                    if (img.classList) img.classList.remove('mem-img-missing');
+                } catch (e) {}
+                return;
+            }
+            if (rec.url && rec.url !== url) revoke(rec.url);
+            rec.url = url;
+            rec.state = 'ready';
+            setImgSrc(img, url);
+            try {
+                img.dataset.src = url;            // 主程序“双击看大图”读的是 data-src
+                img.dataset.memState = 'ready';
+                if (img.classList) img.classList.remove('mem-img-missing');
+            } catch (e) {}
+        });
+    }
+
+    function markMissing(img) {
+        var rec = img.__mem;
+        if (rec) rec.state = 'missing';
+        setPlaceholder(img);
+        try {
+            img.dataset.memState = 'missing';
+            img.dataset.src = '';
+            if (img.classList) { img.classList.remove('mem-img-loading'); img.classList.add('mem-img-missing'); }
+        } catch (e) {}
+    }
+
+    function releaseImg(img, drop) {
+        var rec = img && img.__mem;
+        if (!rec) return;
+        if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
+        var url = rec.url;
+        rec.url = null;
+        if (rec.state === 'ready' || rec.state === 'missing' || rec.state === 'error') {
+            rec.state = 'released';
+            setPlaceholder(img);                  // 先换占位再 revoke，避免出现裂图一闪
+            try {
+                img.dataset.memState = 'released';
+                img.dataset.src = '';
+            } catch (e) {}
+        } else if (drop) {
+            rec.state = 'idle';
+        }
+        revoke(url);
+        if (drop) {
+            try { if (io) io.unobserve(img); } catch (e) {}
+            try { img.__memTracked = false; } catch (e) {}
+            img.__mem = null;
+        }
+    }
+
+    function scheduleRelease(img) {
+        var rec = img && img.__mem;
+        if (!rec || rec.state !== 'ready' || rec.timer) return;
+        rec.timer = setTimeout(function () {
+            rec.timer = null;
+            if (!isAttached(img)) { releaseImg(img, true); return; }
+            var r = rectOf(img);
+            if (!r) return;
+            var vh = viewportHeight();
+            var near = r.bottom > -PRELOAD_PX && r.top < vh + PRELOAD_PX;
+            if (near) return;
+            releaseImg(img, false);
+        }, RELEASE_MS);
+    }
+
+    function sweep() {
+        var keep = [];
+        for (var i = 0; i < state.tracked.length; i++) {
+            var img = state.tracked[i];
+            if (img && isAttached(img)) { keep.push(img); continue; }
+            try { releaseImg(img, true); } catch (e) {}
+        }
+        state.tracked = keep;
+    }
+
+    // 可视区判定：近了就取图，远了就释放（objectURL 一定 revoke，避免又堆回内存）
+    function evaluateVisibility() {
+        var vh = viewportHeight();
+        for (var i = 0; i < state.tracked.length; i++) {
+            var img = state.tracked[i];
+            if (!img) continue;
+            var rec = img.__mem;
+            if (!rec || !rec.id) continue;
+            var r = rectOf(img);
+            var laidOut = !!r && (r.width > 0 || r.height > 0);   // 容器被隐藏时尺寸为 0
+            var near = laidOut && r.bottom > -PRELOAD_PX && r.top < vh + PRELOAD_PX;
+            if (near) {
+                if (rec.state === 'idle' || rec.state === 'released' || rec.state === 'missing' || rec.state === 'error') {
+                    enqueue(img);
+                }
+            } else if (rec.state === 'ready') {
+                scheduleRelease(img);
+            } else if (rec.state === 'idle') {
+                // 还没取回但 DOM 里可能还挂着旧 base64：先释放，等滚回来再按需取
+                var src = '';
+                try { src = img.getAttribute ? img.getAttribute('src') : img.src; } catch (e) {}
+                if (isDataUrl(src) && src !== PLACEHOLDER) {
+                    rec.state = 'released';
+                    setPlaceholder(img);
+                    try { img.dataset.memState = 'released'; img.dataset.src = ''; } catch (e) {}
+                }
+            }
+        }
+    }
+
+    function scheduleEvaluate() {
+        if (evaluateTimer) return;
+        evaluateTimer = setTimeout(function () {
+            evaluateTimer = null;
+            try { sweep(); } catch (e) {}
+            try { evaluateVisibility(); } catch (e) {}
+        }, 80);
+    }
+
+    function releaseAllImages() {
+        for (var i = 0; i < state.tracked.length; i++) {
+            var img = state.tracked[i];
+            if (img && img.__mem && img.__mem.state === 'ready') releaseImg(img, false);
+        }
+    }
+
+    /* ============================================================
+     * 5. 新消息拦截：包装 addMessage（先外置再落盘语义，失败保留原图）
+     * ============================================================ */
+    var extPending = (typeof WeakSet === 'function') ? new WeakSet() : null;
+    function isExtPending(m) { try { return !!extPending && extPending.has(m); } catch (e) { return false; } }
+    function markExtPending(m, on) { if (!extPending) return; try { if (on) extPending.add(m); else extPending.delete(m); } catch (e) {} }
+
+    function makeAddWrapper(fn) {
+        var wrapped = function (msg) {
+            var ret = fn.apply(this, arguments);      // 先走原逻辑（渲染/滚动/落盘），返回值原样透传
+            try {
+                if (msg && typeof msg === 'object' && !isExtPending(msg) && needsExternalize(msg)) {
+                    markExtPending(msg, true);
+                    externalizeOne(msg).then(function (ok) {
+                        markExtPending(msg, false);
+                        if (!ok) return;              // 失败：什么都不做，图还在内存 / 后续迁移再试
+                        saveSoon();                   // 用 imageId + 空 image 覆盖刚才那版大图存档
+                        scheduleHydrate();            // DOM 里那张大 base64 换成按需加载的 blob URL
+                        log('新图片已外置');
+                    }, function () { markExtPending(msg, false); });
+                }
+            } catch (e) {}
+            return ret;
+        };
+        wrapped.__memAddWrapped = true;
+        wrapped.__memOriginal = fn;
+        return wrapped;
+    }
+
+    function installAddMessageHook() {
+        var changed = false;
+        var closureFn = null;
+        try { if (typeof addMessage === 'function') closureFn = addMessage; } catch (e) {}
+        if (closureFn && !closureFn.__memAddWrapped) {
+            var w = makeAddWrapper(closureFn);
+            try { addMessage = w; } catch (e) {}
+            try { if (!window.addMessage || window.addMessage === closureFn) window.addMessage = w; } catch (e) {}
+            changed = true;
+        }
+        // 别的功能模块可能临时/永久把 window.addMessage 换成自己的代理：再包一层，保证新图照样外置
+        var winFn = null;
+        try { winFn = window.addMessage; } catch (e) {}
+        if (typeof winFn === 'function' && !winFn.__memAddWrapped) {
+            try { window.addMessage = makeAddWrapper(winFn); changed = true; } catch (e) {}
+        }
+        return changed || !!closureFn || typeof winFn === 'function';
+    }
+
+    /* ============================================================
+     * 6. 生命周期：初始化 / 可见性 / 就绪等待 / 调试接口
+     * ============================================================ */
+    function ensureHooks() {
+        try { installRenderHook(); } catch (e) {}
+        try { installAddMessageHook(); } catch (e) {}
+        try { installObserverFallback(); } catch (e) {}
+    }
+
+    function bindViewport() {
+        try {
+            var root = document.getElementById('chatContainer');
+            if (root && !root.__memScrollBound) {
+                root.__memScrollBound = true;
+                root.addEventListener('scroll', function () {
+                    if (!io) scheduleEvaluate();     // 有 IntersectionObserver 时不需要逐帧量 rect
+                }, { passive: true });
+            }
+        } catch (e) {}
+        try {
+            if (!window.__memViewportBound) {
+                window.__memViewportBound = true;
+                window.addEventListener('resize', scheduleEvaluate, { passive: true });
+                window.addEventListener('orientationchange', scheduleEvaluate, { passive: true });
+                window.addEventListener('pageshow', scheduleEvaluate, { passive: true });
+            }
+        } catch (e) {}
+    }
+
+    var lastMigrateAt = 0;
+    function bindVisibility() {
+        try {
+            document.addEventListener('visibilitychange', function () {
+                if (isHidden()) {
+                    releaseAllImages();               // 切后台：把解码后的图先放掉，降低被强杀概率
+                    return;
+                }
+                scheduleEvaluate();
+                ensureHooks();
+                var st = stats();
+                if (st.remaining > 0 && !state.migrating && Date.now() - lastMigrateAt > 20000 && !state.fatal) {
+                    lastMigrateAt = Date.now();
+                    migrate();
+                }
+            });
+        } catch (e) {}
+    }
+
+    function readyTick() {
+        readyTimer = null;
+        try { ensureHooks(); } catch (e) {}
+        var list = getMessages();
+        if (dataReady() && list && list.length) {
+            lastMigrateAt = Date.now();
+            migrate();
+            return;
+        }
+        readyTries++;
+        if (readyTries < 60) readyTimer = setTimeout(readyTick, 700);    // 最多等 ~42s（等 loadData）
+    }
+    function kickReady() {
+        if (readyTimer) return;
+        readyTries = 0;
+        readyTimer = setTimeout(readyTick, 700);
+    }
+
+    // 低优先级兜底：每分钟自查一次。覆盖“别的模块直接往 messages 里塞消息 / 导入数据 /
+    // 图片瘦身模块把 base64 写回来”这类绕过 addMessage 的路径。
+    function startRescanWatch() {
+        try {
+            setInterval(function () {
+                if (isHidden() || state.migrating || state.fatal || state.dbBroken) return;
+                if (stats().remaining > 0) migrate();
+            }, 60000);
+        } catch (e) {}
+    }
+
+    function init() {
+        if (state.inited) {
+            ensureHooks();
+            return true;
+        }
+        state.inited = true;
+        ensureHooks();
+        bindViewport();
+        bindVisibility();
+        startRescanWatch();
+        openDB().then(function () {
+            refreshStoredCount();
+            requestPersist();
+            if (state.dbBroken) warn('IndexedDB 打开失败，本次不迁移');
+        }, noop);
+        kickReady();
+        return true;
+    }
+
+    function stats() {
+        var list = getMessages();
+        var total = list.length, withId = 0, remaining = 0;
+        for (var i = 0; i < list.length; i++) {
+            var m = list[i];
+            if (!m || typeof m !== 'object') continue;
+            if (m.imageId) withId++;
+            if (needsExternalize(m)) remaining++;
+        }
+        return { total: total, withImageId: withId, remaining: remaining, storedCount: state.storedCount };
+    }
+
+    // 抽样校验：随机挑几条已外置的，确认能按 id 取回内容
+    function verifySpot(n) {
+        var list = getMessages();
+        var picked = [];
+        for (var i = 0; i < list.length && picked.length < (n || 5); i++) {
+            var m = list[i];
+            if (m && m.imageId && m.hasImage) picked.push(m);
+        }
+        var out = { checked: 0, ok: 0, missing: 0 };
+        var chain = Promise.resolve();
+        picked.forEach(function (m) {
+            chain = chain.then(function () {
+                return getImage(m.imageId).then(function (d) {
+                    out.checked++;
+                    if (d && d.indexOf('data:image') === 0) out.ok++;
+                    else out.missing++;
+                });
+            });
+        });
+        return chain.then(function () { return out; });
+    }
+
+    // 孤儿清理：默认只统计不删除（避免消息被裁剪时误删）；确认无误后传 { force: true }
+    function gc(opts) {
+        opts = opts || {};
+        var list = getMessages();
+        if (!list.length) return Promise.resolve({ skipped: true, reason: 'no-messages' });
+        return listKeys().then(function (keys) {
+            if (!keys) return { skipped: true, reason: 'no-getAllKeys' };
+            var live = {};
+            for (var i = 0; i < list.length; i++) if (list[i] && list[i].imageId) live[list[i].imageId] = 1;
+            var dead = [];
+            for (var j = 0; j < keys.length; j++) if (!live[keys[j]]) dead.push(keys[j]);
+            if (!opts.force) return { orphans: dead.length, removed: 0, keys: dead.slice(0, 20) };
+            var removed = 0;
+            var chain = Promise.resolve();
+            dead.forEach(function (k) {
+                chain = chain.then(function () { return delImage(k).then(function (ok) { if (ok) removed++; }); });
+            });
+            return chain.then(function () { refreshStoredCount(); return { orphans: dead.length, removed: removed }; });
+        });
+    }
+
+    // 备份辅助：主程序「导出所选模块」只导出 messages（此时图已是 imageId），
+    // 图片本体需要单独备份；这里给一对显式的导出/恢复接口，避免换机还原后图片丢失。
+    function exportImages() {
+        var list = getMessages();
+        var ids = {};
+        for (var i = 0; i < list.length; i++) if (list[i] && list[i].imageId) ids[list[i].imageId] = 1;
+        var out = { v: 1, at: Date.now(), imgs: {} };
+        var chain = Promise.resolve();
+        Object.keys(ids).forEach(function (id) {
+            chain = chain.then(function () {
+                return getImage(id).then(function (d) { if (d) out.imgs[id] = d; });
+            });
+        });
+        return chain.then(function () { return out; });
+    }
+
+    function importImages(pack) {
+        if (!pack || typeof pack !== 'object' || !pack.imgs) return Promise.resolve({ imported: 0 });
+        var n = 0;
+        var chain = Promise.resolve();
+        Object.keys(pack.imgs).forEach(function (id) {
+            chain = chain.then(function () {
+                return putImage(id, String(pack.imgs[id])).then(function (ok) { if (ok) n++; });
+            });
+        });
+        return chain.then(function () { refreshStoredCount(); return { imported: n }; });
+    }
+
+    window.initMemFeature = init;
+    window.memDebug = window.memDebug || {};
+    window.memDebug.migrate = function (opts) { return migrate(opts); };
+    window.memDebug.stats = stats;
+    window.memDebug.statsAsync = function () {
+        return refreshStoredCount().then(stats);
+    };
+    window.memDebug.hydrate = function () { return hydrate(); };
+    window.memDebug.evaluate = function () { try { sweep(); } catch (e) {} evaluateVisibility(); };
+    window.memDebug.releaseAll = releaseAllImages;
+    window.memDebug.verify = verifySpot;
+    window.memDebug.gc = gc;
+    window.memDebug.exportImages = exportImages;
+    window.memDebug.importImages = importImages;
+    window.memDebug.reset = function () {
+        state.fatal = false;
+        state.dbBroken = false;
+        state.lastError = '';
+        return true;
+    };
+    window.memDebug.imgStore = {
+        putImage: putImage,
+        getImage: getImage,
+        delImage: delImage,
+        hasImage: hasImage,
+        count: countAll,
+        keys: listKeys
+    };
+    window.memDebug.__internal = { state: state, placeholder: PLACEHOLDER, needsExternalize: needsExternalize, needsRemoteImage: needsRemoteImage };
+
+    try { init(); } catch (e) { warn('init 失败', e); }
+})();
+
+})();
 /* ===== 功能模块：msgslim ===== */
 /* ===== 聊天图片瘦身（降低常驻内存，缓解 iOS 闪退） ===== */
 (function () {
