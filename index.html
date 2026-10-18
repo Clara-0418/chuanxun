@@ -14160,6 +14160,62 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：memrevert ===== */
+/* ===== 反迁移：把外置的聊天图片搬回消息数据（回退内存优化，防 IndexedDB 被清导致丢图） ===== */
+(function () {
+    var DB = 'chat_img_db', STORE = 'imgs';
+    window.__memDisabled = true;
+    function openDb() {
+        return new Promise(function (res, rej) {
+            try {
+                var rq = indexedDB.open(DB, 1);
+                rq.onupgradeneeded = function () { try { if (!rq.result.objectStoreNames.contains(STORE)) rq.result.createObjectStore(STORE, { keyPath: 'id' }); } catch (e) {} };
+                rq.onsuccess = function () { res(rq.result); };
+                rq.onerror = function () { rej(rq.error); };
+            } catch (e) { rej(e); }
+        });
+    }
+    function getAll() {
+        return openDb().then(function (db) {
+            return new Promise(function (res, rej) {
+                var tx = db.transaction(STORE, 'readonly'), s = tx.objectStore(STORE), rq = s.getAll();
+                rq.onsuccess = function () { res(rq.result || []); };
+                rq.onerror = function () { rej(rq.error); };
+            });
+        });
+    }
+    function extractData(rec) {
+        if (!rec) return null;
+        var keys = Object.keys(rec);
+        for (var i = 0; i < keys.length; i++) {
+            var v = rec[keys[i]];
+            if (typeof v === 'string' && v.indexOf('data:image') === 0) return v;
+        }
+        return null;
+    }
+    function restore() {
+        return getAll().then(function (imgs) {
+            var map = {};
+            for (var i = 0; i < imgs.length; i++) { if (imgs[i] && imgs[i].id) map[imgs[i].id] = extractData(imgs[i]); }
+            var msgs = window.messages || [];
+            var restored = 0;
+            for (var j = 0; j < msgs.length; j++) {
+                var m = msgs[j];
+                if (!m || !m.imageId) continue;
+                var data = map[m.imageId];
+                if (data && (typeof m.image !== 'string' || m.image.indexOf('data:image') !== 0)) {
+                    m.image = data;
+                    restored++;
+                }
+                if (data) { delete m.imageId; m.hasImage = false; }
+            }
+            if (restored > 0) { try { if (window.saveData) window.saveData(); } catch (e) {} }
+            return restored;
+        }).catch(function () { return 0; });
+    }
+    [2000, 5000, 10000, 20000, 40000, 70000].forEach(function (t) { setTimeout(function () { try { restore(); } catch (e) {} }, t); });
+    window.__restoreChatImages = restore;
+})();
 /* ===== 功能模块：mem（独立作用域） ===== */
 (function(){
 
@@ -14448,9 +14504,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
         return 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     }
     function isDataUrl(v) { return typeof v === 'string' && v.indexOf('data:image') === 0; }
-    function needsExternalize(m) {
-        return !!m && typeof m === 'object' && isDataUrl(m.image) && m.image !== PLACEHOLDER;
-    }
+    function needsExternalize(m) { return false; /* 回退：IndexedDB 会被清导致丢图，停用外置 */ }
     function needsRemoteImage(m) {
         if (!m || typeof m !== 'object') return false;
         if (!m.imageId || !m.hasImage) return false;
