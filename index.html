@@ -7290,6 +7290,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         .pay2-msg-wrap { max-width: 92% !important; width: 92% !important; }
         .pay2-bubble { max-width: 100% !important; width: 100% !important; }
 
+        /* ===== Dock 高度实测补偿（原来写死 88px，iPhone 安全区大时会遮住内容） ===== */
+        #hm2Root { padding-bottom: calc(var(--hm2-dock-h, 88px) + 6px) !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -8464,7 +8467,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             const appContainer = document.getElementById('appContainer');
 
             let appBooted = false;
-            function showApp() {
+            try { setTimeout(function () { try { showApp(); } catch (e) {} }, 6500); } catch (e) {}   // 兜底：动画被系统禁用时也能进 App
+        function showApp() {
                 if (appBooted) return; // animationend 与 350ms 定时器都会触发，必须只启动一次
                 appBooted = true;
                 appContainer.classList.add('visible');
@@ -8794,6 +8798,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             const memStore = {};
             let storageSlow = false; // 存储层超时降级标志：为 true 时写入走 localStorage，避免覆盖主存储里的旧数据
             let dataLoaded = false; // 真实数据是否已从 IndexedDB 读回（未读回前一律不许保存，否则空白状态会覆盖真数据）
+            let sessionDirty = false; // 本次会话是否已产生新数据（有则拒绝被迟到的存档覆盖）
             function storageGet(key) {
                 var _fromLocal = function () {
                     try { var raw = window.localStorage.getItem(key); return Promise.resolve(raw ? JSON.parse(raw) : null); }
@@ -8841,6 +8846,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
                 // 真实数据还没读回：不保存！否则空白/默认状态会把存储里的真数据（含图片）覆盖掉
                 if (!dataLoaded) return Promise.resolve();
+                sessionDirty = true;
                 try {
                         memeReplies = memeReplies.filter(item => typeof item === 'string' && (item.startsWith(
                             'data:') || item.startsWith('http')));
@@ -8885,6 +8891,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         } catch (e) {
                             try {
                                 var light = Object.assign({}, data);
+                                light._trimmed = 1;   // 标记：这条镜像被裁剪过（消息不全）
                                 var __ok = false;
                                 if (Array.isArray(light.messages) && light.messages.length > 40) {
                                     var __msgs = light.messages;
@@ -8944,6 +8951,8 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         // 两份都带时间戳时取较新的；老数据没有 savedAt 时以主存储为准，避免被陈旧镜像覆盖
                         data = mirror;
                     }
+                    // 被裁剪过的镜像：消息一律以主存储为准，避免历史被截断成 40 条
+                    try { if (data && data._trimmed && primary && Array.isArray(primary.messages) && primary.messages.length > ((data.messages || []).length)) data.messages = primary.messages; } catch (e) {}
                     // ===== 关键：图片类字段合并 =====
                 // 配额不足时会写入"轻量镜像"（不含图片）。它可能比主存储新，
                 // 如果直接采用就会把头像/背景图覆盖成空 —— 这里逐字段取"有图的一侧"。
@@ -13348,6 +13357,8 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 loadPromise.then(() => {
                     dataLoaded = true;   // 真数据已就位，此后允许保存
                     if (!uiBooted) { bootUI(); return; }
+                    // 本次会话已产生新数据：迟到的存档不能覆盖（否则'聊着聊着消息没了'）
+                    if (sessionDirty) { storageSlow = false; try { showNotification('本次会话已有新数据，已保留当前内容', 'info', 2600); } catch (e) {} updateStatusChip(); return; }
                     // 迟到的数据：重新套用设置与重绘（不再重复绑定事件/定时器）
                     storageSlow = false;
                     applySettings();
@@ -14131,6 +14142,24 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：dockh ===== */
+/* ===== Dock 高度实测（写入 --hm2-dock-h） ===== */
+(function () {
+    function applyDockH() {
+        try {
+            var d = document.getElementById('hm2Dock');
+            if (!d) return;
+            var h = d.getBoundingClientRect().height;
+            if (h > 0) document.documentElement.style.setProperty('--hm2-dock-h', Math.round(h) + 'px');
+        } catch (e) {}
+    }
+    try {
+        [300, 1200, 3000, 6000].forEach(function (t) { setTimeout(applyDockH, t); });
+        window.addEventListener('resize', applyDockH);
+        window.addEventListener('orientationchange', function () { setTimeout(applyDockH, 200); });
+    } catch (e) {}
+    window.__applyDockH = applyDockH;
+})();
 /* ===== 功能模块：fx（独立作用域） ===== */
 (function(){
 
