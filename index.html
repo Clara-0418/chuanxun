@@ -14147,7 +14147,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
 /* ===== 功能模块：msgslim ===== */
 /* ===== 聊天图片瘦身（降低常驻内存，缓解 iOS 闪退） ===== */
 (function () {
-    var MAX = 200 * 1024, SIDE = 1024, PER_RUN = 8, busy = false;
+    var MAX = 120 * 1024, SIDE = 900, PER_RUN = 12, busy = false;   // 更激进：超 120KB 就压到 900px，每轮 12 张
     function shrink(mm) {
         try {
             var img = new Image();
@@ -20098,7 +20098,7 @@ w.specFeatureInternal = {
             });
             eachAsync(tasks, 0, function (t, next) {
                 var cur = lib[t.k][t.i];
-                recompress(cur, 256, 0.85, function (out) {
+                recompress(cur, 224, 0.82, function (out) {
                     if (out && out.length < cur.length) { freed += cur.length - out.length; lib[t.k][t.i] = out; changed = true; }
                     next();
                 });
@@ -21396,7 +21396,7 @@ function lovGifts() { var arr = lovData().giftShelf; return Array.isArray(arr) ?
         var image = new Image();
         image.onload = function () {
             try {
-                var MAX = 1600, w = image.naturalWidth || image.width, h = image.naturalHeight || image.height;
+                var MAX = 1280, w = image.naturalWidth || image.width, h = image.naturalHeight || image.height;
                 if (!w || !h) { try { URL.revokeObjectURL(url); } catch (e) {} lovReadImage(file, cb); return; }
                 var sc = Math.min(1, MAX / Math.max(w, h));
                 w = Math.max(1, Math.round(w * sc)); h = Math.max(1, Math.round(h * sc));
