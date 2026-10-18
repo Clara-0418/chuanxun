@@ -8768,7 +8768,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 setTimeout(run, 32);
             }
             // 长会话只渲染最近 N 条，避免手机端 DOM/内存无限膨胀（数据本身完整保留）
-            const RENDER_WINDOW_STEP = 120;   // 每次渲染的 DOM 条数（长会话性能）
+            const RENDER_WINDOW_STEP = 80;   // 每次渲染的 DOM 条数（长会话性能）
             let renderWindowSize = RENDER_WINDOW_STEP;
             // 按渲染节点反查消息对象：优先 id，兼容无 id 的旧数据（用渲染时记录的索引兜底）
             function findMessageByWrapper(wrapper) {
@@ -14144,6 +14144,52 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：msgslim ===== */
+/* ===== 聊天图片瘦身（降低常驻内存，缓解 iOS 闪退） ===== */
+(function () {
+    var MAX = 200 * 1024, SIDE = 1024, PER_RUN = 8, busy = false;
+    function shrink(mm) {
+        try {
+            var img = new Image();
+            img.onload = function () {
+                try {
+                    var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+                    if (!w || !h) return;
+                    var sc = Math.min(1, SIDE / Math.max(w, h));
+                    var cv = document.createElement('canvas');
+                    cv.width = Math.max(1, Math.round(w * sc));
+                    cv.height = Math.max(1, Math.round(h * sc));
+                    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+                    var out = cv.toDataURL('image/jpeg', 0.8);
+                    if (out && out.length > 100 && out.length < mm.image.length) {
+                        mm.image = out;
+                        try { if (typeof window.saveData === 'function') window.saveData(); } catch (e) {}
+                    }
+                } catch (e) {}
+            };
+            img.src = mm.image;
+        } catch (e) {}
+    }
+    function run() {
+        if (busy) return;
+        busy = true;
+        try {
+            var msgs = window.messages || [];
+            var n = 0;
+            for (var i = msgs.length - 1; i >= 0 && n < PER_RUN; i--) {
+                var m = msgs[i];
+                if (!m || m.type === 'system') continue;
+                if (typeof m.image !== 'string' || m.image.indexOf('data:image') !== 0) continue;
+                if (m.image.length <= MAX) continue;
+                n++;
+                shrink(m);
+            }
+        } catch (e) {}
+        setTimeout(function () { busy = false; }, 3000);
+    }
+    try { setTimeout(run, 6000); setInterval(run, 60000); } catch (e) {}
+    window.__msgImgSlim = run;
+})();
 /* ===== 功能模块：crashlog ===== */
 /* ===== 崩溃守卫 + 崩溃日志（长按顶部标语可查看） ===== */
 (function () {
