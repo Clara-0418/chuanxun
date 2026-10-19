@@ -15336,7 +15336,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
         } catch (e) {}
         setTimeout(function () { busy = false; }, 3000);
     }
-    try { setTimeout(run, 6000); setInterval(run, 60000); } catch (e) {}
+    /* 已停用：iOS 上反复 canvas 解码大图会导致网页进程崩溃 */
     window.__msgImgSlim = run;
 })();
 /* ===== 功能模块：crashlog ===== */
@@ -21289,7 +21289,7 @@ w.specFeatureInternal = {
 
     window.initStorageSlim = check;
     window.storageSlimRun = check;
-    try { setTimeout(check, 3000); setInterval(check, 60000); } catch (e) {}
+    /* 已停用：iOS 上反复 canvas 重编码会导致网页进程崩溃（图片已有上传时压缩 + 多层备份保护） */
 })();})();
 /* ===== 功能模块：hwset（独立作用域） ===== */
 
