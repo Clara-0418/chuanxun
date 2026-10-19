@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>数据救援 · 传讯</title>
+<style>
+    body { margin: 0; padding: 16px; font-family: -apple-system, "PingFang SC", sans-serif; background: #f6f4f2; color: #333; font-size: 14px; line-height: 1.6; }
+    h2 { font-size: 17px; margin: 0 0 12px; }
+    .card { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .k { font-weight: 600; }
+    .s { color: #888; font-size: 12px; }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; background: #faf8f6; padding: 10px; border-radius: 8px; margin: 8px 0 0; max-height: 46vh; overflow: auto; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: #d99ba8; color: #fff; font-size: 15px; font-weight: 600; margin-top: 10px; }
+    button.gray { background: #bbb; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 30vh; font-size: 11px; padding: 8px; border-radius: 8px; border: 1px solid #ddd; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>数据救援</h2>
+<div class="card">
+    <div class="k">本页用途</div>
+    <div class="s">独立于主程序，只读本地存储。即使主程序闪退，这里也能打开。先把数据备份出来，再谈修复。</div>
+</div>
+<div class="card">
+    <div class="k">1. 本地存储（localStorage）</div>
+    <pre id="ls">读取中…</pre>
+</div>
+<div class="card">
+    <div class="k">2. 浏览器数据库（IndexedDB）</div>
+    <pre id="idb">读取中…</pre>
+</div>
+<div class="card">
+    <div class="k">3. 备份</div>
+    <button id="dl">下载备份文件（JSON）</button>
+    <button id="show" class="gray">在页面显示备份内容（可长按复制）</button>
+    <button id="copy" class="gray">复制到剪贴板</button>
+    <textarea id="ta" placeholder="点上面的按钮后，内容会出现在这里"></textarea>
+</div>
+<script>
+(function () {
+    var LS_KEYS = ['CHAT_APP_V13_appData', 'CHAT_APP_V13_imgBackup', 'CHAT_APP_V13_crashLog'];
+    var backup = { at: new Date().toISOString(), localStorage: {}, indexedDB: {}, summary: {} };
+    var out = document.getElementById('ls');
+
+    function fmt(n) { return n > 1024 * 1024 ? (n / 1048576).toFixed(2) + ' MB' : n > 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B'; }
+
+    var lines = [];
+    LS_KEYS.forEach(function (k) {
+        var v = null;
+        try { v = window.localStorage.getItem(k); } catch (e) {}
+        if (v === null) { lines.push(k + '：无'); return; }
+        backup.localStorage[k] = v;
+        lines.push(k + '：' + fmt(v.length));
+        try {
+            var o = JSON.parse(v);
+            if (o && o.messages) lines.push('   └ 消息 ' + o.messages.length + ' 条');
+            if (o && o.featureData && o.featureData.avatarLib) {
+                var a = o.featureData.avatarLib;
+                lines.push('   └ 头像 我 ' + ((a.mine || []).length) + ' / 梦角 ' + ((a.partner || []).length));
+            }
+            if (o && o.settings) lines.push('   └ 昵称 ' + (o.settings.myName || '?') + ' & ' + (o.settings.partnerName || '?'));
+        } catch (e) { lines.push('   └ (无法解析)'); }
+    });
+    out.textContent = lines.join('\n');
+
+    var idbOut = document.getElementById('idb');
+    var idbLines = [];
+
+    function listDbs() {
+        if (indexedDB.databases) {
+            return indexedDB.databases().catch(function () { return []; });
+        }
+        return Promise.resolve([]);
+    }
+
+    function openDb(name, version) {
+        return new Promise(function (res) {
+            var rq = indexedDB.open(name, version);
+            rq.onsuccess = function () { res(rq.result); };
+            rq.onerror = function () { res(null); };
+            rq.onblocked = function () { res(null); };
+        });
+    }
+
+    function dumpDb(db) {
+        var names = Array.prototype.slice.call(db.objectStoreNames);
+        return Promise.all(names.map(function (n) {
+            return new Promise(function (res) {
+                try {
+                    var tx = db.transaction(n, 'readonly'), s = tx.objectStore(n), rq = s.getAll();
+                    rq.onsuccess = function () { res({ store: n, count: (rq.result || []).length, data: rq.result || [] }); };
+                    rq.onerror = function () { res({ store: n, count: -1, data: [] }); };
+                } catch (e) { res({ store: n, count: -1, data: [] }); }
+            });
+        }));
+    }
+
+    listDbs().then(function (dbs) {
+        if (!dbs || !dbs.length) { idbLines.push('（浏览器不支持枚举，或没有数据库）'); idbOut.textContent = idbLines.join('\n'); return; }
+        var chain = Promise.resolve();
+        dbs.forEach(function (info) {
+            chain = chain.then(function () {
+                return openDb(info.name, info.version).then(function (db) {
+                    if (!db) { idbLines.push(info.name + '：打不开'); return; }
+                    return dumpDb(db).then(function (stores) {
+                        idbLines.push(info.name + '：');
+                        stores.forEach(function (st) {
+                            idbLines.push('   └ ' + st.store + '：' + st.count + ' 条');
+                            backup.indexedDB[info.name] = backup.indexedDB[info.name] || {};
+                            backup.indexedDB[info.name][st.store] = st.data;
+                        });
+                        try { db.close(); } catch (e) {}
+                    });
+                });
+            });
+        });
+        return chain.then(function () { idbOut.textContent = idbLines.join('\n'); });
+    }).catch(function (e) {
+        idbOut.textContent = '读取失败：' + e;
+    });
+
+    function buildJson() {
+        try {
+            var size = JSON.stringify(backup).length;
+            backup.summary = { byteSize: size };
+        } catch (e) {}
+        return JSON.stringify(backup);
+    }
+
+    document.getElementById('dl').addEventListener('click', function () {
+        try {
+            var blob = new Blob([buildJson()], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'chuanxun-backup-' + Date.now() + '.json';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+        } catch (e) { alert('下载失败：' + e); }
+    });
+
+    document.getElementById('show').addEventListener('click', function () {
+        document.getElementById('ta').value = buildJson();
+    });
+
+    document.getElementById('copy').addEventListener('click', function () {
+        var s = buildJson();
+        var ta = document.getElementById('ta');
+        ta.value = s;
+        ta.select();
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(s).then(function () { alert('已复制（' + fmt(s.length) + '）'); }, function () { alert('复制失败，请长按文本框手动全选复制'); });
+            } else {
+                document.execCommand('copy');
+                alert('已尝试复制，若失败请长按文本框手动复制');
+            }
+        } catch (e) { alert('复制失败，请长按文本框手动复制'); }
+    });
+})();
+</script>
+</body>
+</html>
