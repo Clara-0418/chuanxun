@@ -13517,7 +13517,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                     'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
-                    try { if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
+                    try { var __DEFER = { initHabitFeature: 1, initPeriodFeature: 1, initAccompanyFeature: 1, initMusicFeature: 1, initWatchFeature: 1, initCompanyFeature: 1, initLoveDiaryFeature: 1, initShopFeature: 1 }; if (__DEFER[name]) return; if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
                 });
                 // 梦角的状态会不定时从「状态字卡库」随机更新
                 startPartnerStatusTimer();
