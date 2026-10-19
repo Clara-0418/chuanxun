@@ -8862,6 +8862,14 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
                 // 真实数据还没读回：不保存！否则空白/默认状态会把存储里的真数据（含图片）覆盖掉
                 if (!dataLoaded) return Promise.resolve();
+                // 安全阀：曾经有数据、当前却是空的 → 拒绝保存，避免空白状态覆盖真数据
+                try {
+                    if (messages && messages.length > 0) { window.localStorage.setItem(getStorageKey('hadData'), '1'); }
+                    else if (window.localStorage.getItem(getStorageKey('hadData')) === '1') {
+                        if (!window.__emptySaveWarned) { window.__emptySaveWarned = true; try { showNotification('检测到数据为空，已阻止保存以免覆盖原有数据', 'warning', 5000); } catch (e) {} }
+                        return Promise.resolve();
+                    }
+                } catch (e) {}
                 sessionDirty = true;
                 try {
                         memeReplies = memeReplies.filter(item => typeof item === 'string' && (item.startsWith(
@@ -13400,7 +13408,9 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                             if (__m.featureData && typeof __m.featureData === 'object') { featureData = __m.featureData; normalizeFeatureData(); }
                         }
                     } catch (e) {}
-                    dataLoaded = true;
+                    // 只有镜像里确实有数据才允许保存；镜像为空说明存储不可用，绝不能保存（否则空白覆盖真数据）
+                    try { var __mchk = readLocalMirror(); dataLoaded = !!(__mchk && Array.isArray(__mchk.messages) && __mchk.messages.length > 0); } catch (e) { dataLoaded = false; }
+                    if (!dataLoaded) { try { showNotification('存储异常：为避免覆盖旧数据，本次不保存。请完全关闭后重开', 'warning', 6000); } catch (e) {} }
                     bootUI();
                 }, 8000);
             }
