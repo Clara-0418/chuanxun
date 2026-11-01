@@ -7374,6 +7374,11 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         #keepAliveBadge { display: none !important; }
         #keepAliveBadge.show, #keepAliveBadge.active { display: none !important; }
 
+        /* ===== 彻底隐藏保活标签（提高优先级，压过任何更具体的选择器） ===== */
+        html body #keepAliveBadge,
+        html body #keepAliveBadge.show,
+        html body #keepAliveBadge.active { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -14254,6 +14259,23 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：killbadge ===== */
+/* ===== 移除保活标签（保活功能本身不受影响） ===== */
+(function () {
+    function kill() {
+        try {
+            var els = document.querySelectorAll('#keepAliveBadge');
+            for (var i = 0; i < els.length; i++) {
+                try { els[i].style.setProperty('display', 'none', 'important'); } catch (e) {}
+                try { els[i].remove(); } catch (e) {}
+            }
+        } catch (e) {}
+    }
+    kill();
+    var n = 0;
+    var iv = setInterval(function () { kill(); if (++n > 120) { clearInterval(iv); } }, 500);
+    try { document.addEventListener('DOMContentLoaded', kill); } catch (e) {}
+})();
 /* ===== 功能模块：stickerslim（独立作用域） ===== */
 (function(){
 
@@ -23583,7 +23605,7 @@ w.specFeatureInternal = {
                     try {
                         var __mb = (JSON.stringify(window.featureData || {}).length / 1048576);
                         if (window.localStorage) { __mb += (String(window.localStorage.getItem("CHAT_APP_V13_appData") || "").length / 1048576); }
-                        if (!window.__storageReportDone) { window.__storageReportDone = true; notify("数据占用约 " + __mb.toFixed(2) + " MB" + (__mb > 4 ? "（接近上限，图片会存不住）" : ""), __mb > 4 ? "warning" : "info"); }
+                        /* 数据占用提示已移除（该数值是存储体积且含镜像副本，容易被误认为内存占用） */
                     } catch (e) {}
                     if (changed) {
                         try { if (typeof saveData === 'function') saveData(); } catch (e) {}
