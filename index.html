@@ -14259,6 +14259,31 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：msrevert ===== */
+/* ===== 回退聊天记录归档：把已归档的消息全部拉回内存，并停用继续归档 ===== */
+(function () {
+    function disable() {
+        try {
+            if (!window.msDebug) return;
+            try { if (window.msDebug.pause) window.msDebug.pause(); } catch (e) {}
+            try { window.msDebug.archive = function () { return Promise.resolve({ disabled: true }); }; } catch (e) {}
+        } catch (e) {}
+    }
+    function restore() {
+        disable();
+        try {
+            if (window.msDebug && window.msDebug.restoreAll) {
+                var r = window.msDebug.restoreAll();
+                if (r && r.then) { r.then(function () { try { if (window.saveData) window.saveData(); } catch (e) {} }).catch(function () {}); }
+                else { try { if (window.saveData) window.saveData(); } catch (e) {} }
+            }
+        } catch (e) {}
+    }
+    [2500, 6000, 12000, 20000].forEach(function (t) { setTimeout(function () { disable(); }, t); });
+    setTimeout(restore, 4000);
+    setTimeout(restore, 16000);
+    window.__restoreMsgs = restore;
+})();
 /* ===== 功能模块：killbadge ===== */
 /* ===== 移除保活标签（保活功能本身不受影响） ===== */
 (function () {
