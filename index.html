@@ -14201,12 +14201,17 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     }
     var done = false;
     function once() {
-        if (done) return;
-        done = true;
-        try { document.removeEventListener('pointerdown', once, true); } catch (e) {}
-        try { document.removeEventListener('touchstart', once, true); } catch (e) {}
-        try { document.removeEventListener('click', once, true); } catch (e) {}
+        // 每次点击都重试，直到音频真的在播（iOS 手势判定严格，一次可能不成功）
+        var a = null;
+        try { a = (typeof ensureBackgroundAudio === 'function') ? ensureBackgroundAudio() : null; } catch (e) {}
+        var playing = !!(a && !a.paused && a.readyState >= 2);
+        if (playing) done = true;
         armed();
+        if (done) {
+            try { document.removeEventListener('pointerdown', once, true); } catch (e) {}
+            try { document.removeEventListener('touchstart', once, true); } catch (e) {}
+            try { document.removeEventListener('click', once, true); } catch (e) {}
+        }
     }
     try { document.addEventListener('pointerdown', once, true); } catch (e) {}
     try { document.addEventListener('touchstart', once, true); } catch (e) {}
