@@ -4796,6 +4796,13 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：msgstore ===== */
+/* msgstore：主程序「显示更早的消息」按钮的基础样式沿用 .load-earlier-btn，这里只补充状态色（全部走主题变量） */
+.ms-load-earlier { -webkit-tap-highlight-color: transparent; }
+.ms-load-earlier:disabled { opacity: .55; cursor: default; }
+.ms-load-earlier:hover:not(:disabled) { border-color: var(--accent-color); color: var(--text-primary); }
+.ms-load-earlier:active:not(:disabled) { background: rgba(var(--accent-color-rgb), .10); }
+
 /* ===== 功能模块：mem ===== */
 /* ===== 功能模块：mem（聊天图片外置 IndexedDB + 按需加载） =====
  * 只做两件事：把 base64 图片挪出内存；渲染时按需把图取回，离开可视区再释放。
@@ -7561,6 +7568,10 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：msgstore ===== -->
+<!-- msgstore：可选的按钮模板（JS 找不到模板时用 document.createElement 兜底，功能完全一致） -->
+<template id="ms-tpl-earlier"><button type="button" class="load-earlier-btn ms-load-earlier" data-ms="earlier"></button></template>
+
 <!-- ===== 功能模块：mem ===== -->
 <!-- 功能模块：mem —— 无需额外 DOM：占位块由脚本就地注入图片气泡内部 -->
 
@@ -13521,7 +13532,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature', 'initMsgStoreFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { var __DEFER = { initHabitFeature: 1, initPeriodFeature: 1, initAccompanyFeature: 1, initMusicFeature: 1, initWatchFeature: 1, initCompanyFeature: 1, initLoveDiaryFeature: 1, initShopFeature: 1 }; if (__DEFER[name]) return; if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14177,6 +14188,1165 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：msgstore（独立作用域） ===== */
+(function(){
+
+/* ===== 功能模块：msgstore（聊天记录分块持久化 + 内存窗口） =====
+ *
+ * 目标：messages 常驻内存 + 每次落盘都序列化全部历史，是长会话内存与卡顿的主因之一。
+ * 做法：把最旧的消息按每块 300 条切块，写进独立 IndexedDB（chat_msg_db / store: chunks），
+ *       内存里的 messages 只保留最近 MEM_LIMIT(600) 条；向上翻页时按需把一块插回内存头部。
+ *
+ * 安全红线（代码里对应的顺序）：
+ *   1) 任何一条消息离开内存之前，必须：
+ *        a. chunk + 索引记录在【同一个事务】里 put，并且等 tx.oncomplete（不是 onsuccess）；
+ *        b. 回读该 chunk，校验 count / 首尾 timestamp / 逐条 id 与 timestamp / 文本与图片长度；
+ *      只有这两步都通过，才执行 messages.splice(0, n)。
+ *   2) 图片绝不外置：图片 dataURL 继续留在消息对象里，跟着消息整条进 chunk，
+ *      不新增 imageId、不清空 m.image、不写任何"图片专用库"。
+ *   3) 任何一步失败 → 原地不动（不回读通过就绝不移除），宁可内存不降。
+ *   4) 可回退：window.msDebug.restoreAll() 把全部 chunk 顺序拉回内存头部。
+ *
+ * 约束：不改主程序函数体，只在 renderMessages / saveData / flushSave 外面包一层
+ *      （标记位 __msWrapped 保证只包一层、透传返回值、异常兜住）。
+ * 数据：featureData.msgStore = { archivedBefore, chunkCount }（只此两个字段，绝不碰其它键）。
+ */
+
+(function () {
+    'use strict';
+
+    if (typeof window === 'undefined') return;
+    if (window.__msMsgStoreLoaded) return;          // 同一页面被重复注入时只跑一份
+    window.__msMsgStoreLoaded = true;
+
+    /* ============================================================
+     * 0. 常量与状态
+     * ============================================================ */
+    var VER = '1.0.0';
+    var MEM_LIMIT = 2000;              // 内存窗口：只保留最近 600 条（可改这个常量）
+    var CHUNK_SIZE = 300;             // 每块 300 条
+    var MIN_SLICE = 20;               // 体积保护时单块最少条数
+    var MAX_CHUNK_BYTES = 8 * 1024 * 1024;   // 单块估算体积上限（含图片），超了就缩块
+    var DB_NAME = 'chat_msg_db';      // 独立库：不碰主存储 appData，也不碰 chat_img_db
+    var DB_VER = 1;
+    var STORE = 'chunks';             // chunk 记录：{id, from, to, count, data}
+    var META_STORE = 'msmeta';        // 轻量索引：{id:'index', items:[{id,from,to,count,fromId,toId,at}]}
+    var META_ID = 'index';
+    var BOOT_DELAY = 3000;            // 启动后延迟 3 秒再归档
+    var TICK_FAST = 400;              // 启动等待轮询步长
+    var TICK_IDLE = 60000;            // 空闲维护轮询步长
+
+    var S = {
+        inited: false,
+        ready: false,
+        readyAt: 0,
+        polls: 0,
+        noIDB: false,
+        db: null,
+        dbOpening: null,
+        dbFails: 0,
+        fatal: false,                 // 致命错误（写失败/校验失败）：本会话彻底停手
+        paused: false,                // restoreAll / meta 被重置后暂停自动归档
+        indexLoaded: false,
+        index: null,                  // {items:[...], archivedCount}
+        running: false,
+        firstArchiveDone: false,
+        catchingUp: false,            // 上次归档被打断（如切后台）：下次回来继续补齐
+        parkedHead: null,             // 因"与已有块重叠"停下来时记下的内存头部时间戳（头部没变就不再反复试）
+        chunkCount: 0,
+        archivedCount: 0,
+        archivedBefore: null,
+        loadedIds: {},                // 本会话已载回内存的 chunk id（防重复载入）
+        removedTotal: 0,
+        lastError: '',
+        lastArchiveAt: 0,
+        lastSaveAt: 0,
+        tickTimer: null,              // 全模块只有一个"下一轮"定时器
+        injecting: false,
+        restoring: false,
+        loadingEarlier: false,
+        persistAsked: false,
+        persisted: null,
+        fdRef: null,
+        metaResetPaused: false,       // 本会话检测到 featureData 被整体重置
+        wrapped: { render: false, save: false, flush: false }
+    };
+
+    /* ============================================================
+     * 1. 小工具
+     * ============================================================ */
+    function log() {
+        try { console.log.apply(console, ['[msgstore]'].concat(Array.prototype.slice.call(arguments))); } catch (e) {}
+    }
+    function warn() {
+        try { console.warn.apply(console, ['[msgstore]'].concat(Array.prototype.slice.call(arguments))); } catch (e) {}
+    }
+    function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+    function doc() { try { return (typeof document !== 'undefined') ? document : null; } catch (e) { return null; } }
+    function msHidden() {
+        var d = doc();
+        if (!d) return false;
+        try {
+            if (d.hidden === true) return true;
+            if (d.visibilityState === 'hidden') return true;
+        } catch (e) {}
+        return false;
+    }
+    function tsNum(v) {
+        if (v == null) return 0;
+        try {
+            if (v instanceof Date) return v.getTime() || 0;
+            var n = new Date(v).getTime();
+            return isFinite(n) ? n : 0;
+        } catch (e) { return 0; }
+    }
+    // 消息身份：优先 id；没有 id 的旧数据用"时间戳+发送方+文本长度/前缀+图片长度"做稳定指纹
+    function keyOf(m) {
+        if (!m || typeof m !== 'object') return 'nil';
+        try { if (m.id != null && m.id !== '') return 'i:' + String(m.id); } catch (e) {}
+        var t = tsNum(m.timestamp), s = '', im = 0;
+        try { s = String(m.text == null ? '' : m.text); } catch (e) {}
+        try { im = (typeof m.image === 'string') ? m.image.length : (m.image ? 1 : 0); } catch (e) {}
+        return 'h:' + t + '|' + String(m.sender == null ? '' : m.sender) + '|' + s.length + '|' + s.slice(0, 24) + '|' + im;
+    }
+    // 单条消息的粗估字节数（UTF-16 近似）：只用来判断"这一块会不会太大"，不做精确统计
+    function approxBytes(m) {
+        if (!m) return 16;
+        var n = 96;
+        try {
+            if (typeof m.text === 'string') n += m.text.length * 2;
+            if (typeof m.image === 'string') n += m.image.length * 2;
+            if (m.replyTo) { n += 64; if (typeof m.replyTo.text === 'string') n += m.replyTo.text.length * 2; }
+            if (m.redPacket) { n += 64; if (typeof m.redPacket.text === 'string') n += m.redPacket.text.length * 2; }
+            if (m.product) n += 128;
+        } catch (e) {}
+        return n;
+    }
+
+    /* ============================================================
+     * 2. 主程序能力的「闭包变量 → window → DOM」解析
+     *    注入点在主 IIFE 内部时，裸标识符可直接拿到闭包变量（messages / renderWindowSize）；
+     *    若被作为独立 <script> 注入，则退回 window.messages（主程序是 getter，读到的始终是最新数组）
+     * ============================================================ */
+    function msLiveMessages() {
+        try {
+            if (typeof messages !== 'undefined' && messages && typeof messages.length === 'number') return messages;
+        } catch (e) {}
+        try {
+            var m = window.messages;
+            if (m && typeof m.length === 'number') return m;
+        } catch (e2) {}
+        return null;
+    }
+    function msFD() {
+        // 只读：解析主程序当前真实生效的 featureData 对象（window 上是 getter/setter）
+        try {
+            var a = window.featureData;
+            if (a && typeof a === 'object' && !Array.isArray(a)) return a;
+        } catch (e) {}
+        try {
+            if (typeof featureData !== 'undefined' && featureData && typeof featureData === 'object' && !Array.isArray(featureData)) return featureData;
+        } catch (e2) {}
+        return null;
+    }
+    function msDataLoaded() {
+        try {
+            if (typeof dataLoaded !== 'undefined') return dataLoaded === true;
+        } catch (e) {}
+        // 独立注入时拿不到闭包里的 dataLoaded：用"内存里已有消息"作为已加载的判据
+        var arr = msLiveMessages();
+        return !!(arr && arr.length > 0);
+    }
+    function msSave() {
+        try { if (typeof saveData === 'function') { saveData(); return true; } } catch (e) {}
+        try { if (typeof window.saveData === 'function') { window.saveData(); return true; } } catch (e2) {}
+        return false;
+    }
+    function msRender() {
+        try { if (typeof renderMessages === 'function') { renderMessages(); return true; } } catch (e) {}
+        try { if (typeof window.renderMessages === 'function') { window.renderMessages(); return true; } } catch (e2) {}
+        return false;
+    }
+    function msNotify(msg, type) {
+        try {
+            if (typeof window.showNotification === 'function') window.showNotification(msg, type || 'info', 3000);
+        } catch (e) {}
+    }
+    function findContainer() {
+        try {
+            if (typeof chatContainer !== 'undefined' && chatContainer && chatContainer.appendChild) return chatContainer;
+        } catch (e) {}
+        try { var d = doc(); if (d && d.getElementById) return d.getElementById('chatContainer'); } catch (e2) {}
+        return null;
+    }
+    function findEarlierButton() {
+        var c = findContainer();
+        if (!c || !c.querySelector) return null;
+        try {
+            var nodes = c.querySelectorAll ? c.querySelectorAll('.load-earlier-btn') : null;
+            if (nodes && nodes.length) {
+                for (var i = 0; i < nodes.length; i++) {
+                    var cls = ' ' + String(nodes[i].className || '') + ' ';
+                    if (cls.indexOf(' ms-load-earlier ') < 0) return nodes[i];
+                }
+                return null;
+            }
+        } catch (e) {}
+        try { return c.querySelector('.load-earlier-btn:not(.ms-load-earlier)'); } catch (e2) {}
+        try {
+            var b = c.querySelector('.load-earlier-btn');
+            if (b) {
+                var c2 = ' ' + String(b.className || '') + ' ';
+                if (c2.indexOf(' ms-load-earlier ') < 0) return b;
+            }
+        } catch (e3) {}
+        return null;
+    }
+
+    /* ============================================================
+     * 3. IndexedDB 层（独立库 chat_msg_db）
+     * ============================================================ */
+    function idbFactory() {
+        try { return window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || null; } catch (e) { return null; }
+    }
+    function openDB() {
+        if (S.db) return Promise.resolve(S.db);
+        if (S.dbOpening) return S.dbOpening;
+        var f = idbFactory();
+        if (!f || typeof f.open !== 'function') {
+            S.noIDB = true;
+            return Promise.reject(new Error('indexeddb-unavailable'));
+        }
+        S.dbOpening = new Promise(function (resolve, reject) {
+            var rq;
+            try { rq = f.open(DB_NAME, DB_VER); } catch (e) { reject(e); return; }
+            rq.onupgradeneeded = function () {
+                try {
+                    var db = rq.result;
+                    if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+                    if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: 'id' });
+                } catch (e) { warn('建表失败', e); }
+            };
+            rq.onsuccess = function () {
+                var db = rq.result;
+                try {
+                    db.onversionchange = function () {
+                        try { db.close(); } catch (e) {}
+                        S.db = null;
+                        S.dbOpening = null;
+                    };
+                } catch (e) {}
+                S.db = db;
+                resolve(db);
+            };
+            rq.onerror = function () { reject(rq.error || new Error('open-failed')); };
+            rq.onblocked = function () { warn('IndexedDB 打开被其它标签页阻塞'); };
+        }).then(function (db) {
+            return db;
+        }, function (err) {
+            S.dbOpening = null;
+            S.dbFails++;
+            if (S.dbFails >= 3) S.fatal = true;
+            S.lastError = 'db-open:' + String((err && err.message) || err);
+            warn('IndexedDB 打开失败（保持原样，不做任何迁移）', err);
+            throw err;
+        });
+        return S.dbOpening;
+    }
+    // 统一事务封装：fn(ctx) 里同步发请求；只有 tx.oncomplete 才算真正落库成功
+    function withStore(names, mode, fn) {
+        return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx, stores = {};
+                try {
+                    tx = db.transaction(names, mode);
+                    for (var i = 0; i < names.length; i++) stores[names[i]] = tx.objectStore(names[i]);
+                } catch (e) { reject(e); return; }
+                var settled = false, result;
+                var ctx = {
+                    tx: tx,
+                    stores: stores,
+                    set: function (v) { result = v; },
+                    fail: function (e) {
+                        if (settled) return;
+                        settled = true;
+                        try { tx.abort(); } catch (x) {}
+                        reject(e || new Error('op-failed'));
+                    }
+                };
+                try { fn(ctx); } catch (e2) { ctx.fail(e2); return; }
+                tx.oncomplete = function () { if (!settled) { settled = true; resolve(result); } };
+                tx.onerror = function () { if (!settled) { settled = true; reject(tx.error || new Error('tx-error')); } };
+                tx.onabort = function () { if (!settled) { settled = true; reject(tx.error || new Error('tx-abort')); } };
+            });
+        });
+    }
+    function normalizeIndex(raw) {
+        var items = (raw && Array.isArray(raw.items)) ? raw.items : [];
+        var out = [];
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            if (!it || typeof it.id !== 'string') continue;
+            out.push({
+                id: it.id,
+                from: num(it.from),
+                to: num(it.to),
+                count: Math.max(0, Math.floor(num(it.count))),
+                fromId: String(it.fromId == null ? '' : it.fromId),
+                toId: String(it.toId == null ? '' : it.toId),
+                at: num(it.at)
+            });
+        }
+        out.sort(function (a, b) { return a.from - b.from; });
+        var total = 0;
+        for (var j = 0; j < out.length; j++) total += out[j].count;
+        return { items: out, archivedCount: total, updatedAt: num(raw && raw.updatedAt) };
+    }
+    function readIndex() {
+        return withStore([META_STORE], 'readonly', function (ctx) {
+            var rq = ctx.stores[META_STORE].get(META_ID);
+            rq.onsuccess = function () { ctx.set(normalizeIndex(rq.result)); };
+            rq.onerror = function () { ctx.fail(rq.error); };
+        }).then(function (idx) {
+            var first = !S.indexLoaded;
+            S.index = idx;
+            S.indexLoaded = true;
+            S.chunkCount = idx.items.length;
+            S.archivedCount = idx.archivedCount;
+            var fd = msFD();
+            var ms = (fd && fd.msgStore && typeof fd.msgStore === 'object') ? fd.msgStore : null;
+            if (ms && ms.archivedBefore != null && S.archivedBefore == null) S.archivedBefore = num(ms.archivedBefore);
+            if (first) {
+                if (S.chunkCount > 0 && !ms) {
+                    // 库里有 chunk 但 featureData 里没有元信息：会话内刚被「重置所有数据」过，还是元信息丢了？
+                    // 内存为空 → 更像重置，不自动接管（避免已删数据复活），但一个字节都不删；
+                    // 内存非空 → 元信息丢失，接管（保证历史不"消失"），并用 orphanAdopted 标记。
+                    var arr0 = msLiveMessages();
+                    if (!arr0 || arr0.length === 0) {
+                        S.metaResetPaused = true;
+                        S.paused = true;
+                        S.lastError = 'meta-reset';
+                        warn('检测到 chunk 存在但元信息缺失且内存为空：本会话不接管（可用 msDebug.restoreAll() 手动恢复）');
+                    } else {
+                        writeMetaToFD();
+                        S.lastError = 'orphan-adopted';
+                        warn('检测到 chunk 存在但元信息缺失：已接管归档元信息（历史不会消失）');
+                    }
+                } else if (S.chunkCount === 0 && ms && num(ms.chunkCount) > 0) {
+                    // 元信息说有 5 块，库里一块都没有 → chunk 库被清了，如实把元信息归零并留痕
+                    S.archivedBefore = null;
+                    writeMetaToFD();
+                    S.lastError = 'chunks-missing';
+                    warn('归档元信息存在但 chunk 库为空（可能被浏览器清理），已如实归零');
+                } else if (S.chunkCount > 0 && ms && num(ms.chunkCount) !== S.chunkCount) {
+                    writeMetaToFD();
+                }
+            }
+            return idx;
+        });
+    }
+    // chunk + 索引：同一个事务，等 oncomplete（不是 onsuccess）
+    function writeChunkAtomic(rec, nextIndex) {
+        return withStore([STORE, META_STORE], 'readwrite', function (ctx) {
+            ctx.stores[STORE].put(rec);
+            ctx.stores[META_STORE].put({
+                id: META_ID,
+                items: nextIndex.items,
+                archivedCount: nextIndex.archivedCount,
+                updatedAt: Date.now(),
+                v: 1
+            });
+        });
+    }
+    function readChunk(id) {
+        return withStore([STORE], 'readonly', function (ctx) {
+            var rq = ctx.stores[STORE].get(id);
+            rq.onsuccess = function () { ctx.set(rq.result || null); };
+            rq.onerror = function () { ctx.fail(rq.error); };
+        });
+    }
+
+    /* ============================================================
+     * 4. 回读校验：只有这里返回 ok，才允许把消息移出内存
+     * ============================================================ */
+    function verifyChunk(rec, draft) {
+        if (!rec || typeof rec !== 'object') return { ok: false, why: 'missing' };
+        var data = rec.data;
+        if (!Array.isArray(data)) return { ok: false, why: 'data-not-array' };
+        if (!Array.isArray(draft) || draft.length === 0) return { ok: false, why: 'draft-empty' };
+        if (data.length !== draft.length) return { ok: false, why: 'count', got: data.length, want: draft.length };
+        if (num(rec.count) !== draft.length) return { ok: false, why: 'meta-count', got: num(rec.count), want: draft.length };
+        var firstTs = tsNum(draft[0].timestamp);
+        var lastTs = tsNum(draft[draft.length - 1].timestamp);
+        if (num(rec.from) !== firstTs) return { ok: false, why: 'from', got: num(rec.from), want: firstTs };
+        if (num(rec.to) !== lastTs) return { ok: false, why: 'to', got: num(rec.to), want: lastTs };
+        if (keyOf(data[0]) !== keyOf(draft[0])) return { ok: false, why: 'head-key' };
+        if (keyOf(data[data.length - 1]) !== keyOf(draft[draft.length - 1])) return { ok: false, why: 'tail-key' };
+        for (var i = 0; i < data.length; i++) {
+            var a = data[i], b = draft[i];
+            if (!a || typeof a !== 'object') return { ok: false, why: 'hole', at: i };
+            if (keyOf(a) !== keyOf(b)) return { ok: false, why: 'key', at: i };
+            if (tsNum(a.timestamp) !== tsNum(b.timestamp)) return { ok: false, why: 'ts', at: i };
+            if (String(a.sender == null ? '' : a.sender) !== String(b.sender == null ? '' : b.sender)) return { ok: false, why: 'sender', at: i };
+            if (String(a.type == null ? '' : a.type) !== String(b.type == null ? '' : b.type)) return { ok: false, why: 'type', at: i };
+            var at = (typeof a.text === 'string') ? a.text.length : (a.text == null ? -1 : 1);
+            var bt = (typeof b.text === 'string') ? b.text.length : (b.text == null ? -1 : 1);
+            if (at !== bt) return { ok: false, why: 'text-len', at: i };
+            var ai = (typeof a.image === 'string') ? a.image.length : (a.image ? 1 : 0);
+            var bi = (typeof b.image === 'string') ? b.image.length : (b.image ? 1 : 0);
+            if (ai !== bi) return { ok: false, why: 'image-len', at: i };
+            // 首尾再取少量字符比对，防"长度相同内容不同"的极端情况（不 stringify 整块，避免大字符串复制）
+            if (i === 0 || i === data.length - 1) {
+                var as = (typeof a.text === 'string') ? (a.text.slice(0, 12) + '|' + a.text.slice(-8)) : '';
+                var bs = (typeof b.text === 'string') ? (b.text.slice(0, 12) + '|' + b.text.slice(-8)) : '';
+                if (as !== bs) return { ok: false, why: 'text-body', at: i };
+                var aim = (typeof a.image === 'string') ? a.image.slice(-24) : '';
+                var bim = (typeof b.image === 'string') ? b.image.slice(-24) : '';
+                if (aim !== bim) return { ok: false, why: 'image-body', at: i };
+            }
+        }
+        return { ok: true };
+    }
+    // 载回内存前的轻校验（只信自己写过并校验过的东西，但每次载入仍复核一遍）
+    function verifyLoaded(rec, item) {
+        if (!rec || !Array.isArray(rec.data) || rec.data.length === 0) return false;
+        if (num(rec.count) !== rec.data.length) return false;
+        if (num(item.count) !== rec.data.length) return false;
+        if (num(rec.from) !== num(item.from) || num(rec.to) !== num(item.to)) return false;
+        if (tsNum(rec.data[0].timestamp) !== num(rec.from)) return false;
+        if (tsNum(rec.data[rec.data.length - 1].timestamp) !== num(rec.to)) return false;
+        return true;
+    }
+    function findOverlap(items, firstKey, lastKey, fromTs, toTs) {
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            if (!it) continue;
+            if (it.fromId === firstKey || it.toId === lastKey || it.fromId === lastKey || it.toId === firstKey) return it;
+            // 端点相等交给上面的 id 判定（同毫秒消息不误判），这里只判"严格相交"
+            if (num(it.from) < toTs && fromTs < num(it.to)) return it;
+        }
+        return null;
+    }
+
+    /* ============================================================
+     * 5. featureData.msgStore 元信息（只这两个字段）
+     * ============================================================ */
+    function writeMetaToFD() {
+        // 只用主程序已经存在的 featureData 对象；绝不自己 new 一个再赋给 window.featureData
+        // （那会走到主程序的 setter，把整份功能数据换成空对象 —— 这是不可接受的数据事故）
+        var fd = msFD();
+        if (!fd) return false;
+        try {
+            if (!fd.msgStore || typeof fd.msgStore !== 'object' || Array.isArray(fd.msgStore)) fd.msgStore = {};
+            fd.msgStore.archivedBefore = (S.archivedBefore == null) ? null : num(S.archivedBefore);
+            fd.msgStore.chunkCount = S.chunkCount | 0;
+            return true;
+        } catch (e) { return false; }
+    }
+    function syncMeta() {
+        if (!S.indexLoaded) return;          // 索引还没读出来：绝不猜、绝不写
+        var fd = msFD();
+        if (!fd) return;
+        var cur = fd.msgStore;
+        if (!cur || typeof cur !== 'object' || Array.isArray(cur)) { if (S.chunkCount > 0) writeMetaToFD(); return; }
+        if (num(cur.chunkCount) !== S.chunkCount || (cur.archivedBefore == null ? null : num(cur.archivedBefore)) !== S.archivedBefore) writeMetaToFD();
+    }
+    function checkFdIdentity() {
+        try {
+            var fd = msFD();
+            if (!fd) return;
+            if (S.fdRef && fd !== S.fdRef) {
+                S.fdRef = fd;
+                if (!fd.msgStore && S.chunkCount > 0) {
+                    // 「重置所有数据」或导入了外部备份：本会话不再自动归档、也不再自动提供旧历史，
+                    // 但绝不删除已归档数据（要清需显式调用 msDebug.clearArchives()）
+                    S.metaResetPaused = true;
+                    S.paused = true;
+                    S.lastError = 'meta-reset';
+                    warn('featureData 被整体替换且没有归档元信息：本会话已暂停归档（归档数据未删除）');
+                }
+            }
+        } catch (e) {}
+    }
+
+    /* ============================================================
+     * 6. 归档：串行、可中断、可续做；每步都"写入→oncomplete→回读校验→才移除"
+     * ============================================================ */
+    function pickSlice(arr) {
+        var excess = arr.length - MEM_LIMIT;
+        if (excess <= 0) return 0;
+        var take = Math.min(CHUNK_SIZE, excess);
+        // 体积保护：一块里图片太多时把块缩小，避免一次写几十 MB 卡死/触发 OOM
+        while (take > MIN_SLICE) {
+            var bytes = 0;
+            for (var i = 0; i < take; i++) bytes += approxBytes(arr[i]);
+            if (bytes <= MAX_CHUNK_BYTES) break;
+            take = Math.max(MIN_SLICE, Math.floor(take / 2));
+        }
+        return take;
+    }
+    function archiveStep() {
+        var arr = msLiveMessages();
+        if (!arr || !arr.length) return Promise.resolve({ stop: 'no-array' });
+        var take = pickSlice(arr);
+        if (!take) return Promise.resolve({ stop: 'complete' });
+
+        var draft = arr.slice(0, take);                       // 只在内存里取引用切片，还没移除任何东西
+        var fromTs = tsNum(draft[0].timestamp);
+        var toTs = tsNum(draft[draft.length - 1].timestamp);
+        var firstKey = keyOf(draft[0]);
+        var lastKey = keyOf(draft[draft.length - 1]);
+        var rec = { id: 'c_' + fromTs + '_' + toTs, from: fromTs, to: toTs, count: draft.length, data: draft };
+
+        return readIndex().then(function (index) {
+            var oldItem = null;
+            for (var i = 0; i < index.items.length; i++) if (index.items[i].id === rec.id) oldItem = index.items[i];
+            if (!oldItem) {
+                var ov = findOverlap(index.items, firstKey, lastKey, fromTs, toTs);
+                if (ov) {
+                    // 已经有块覆盖了这段消息：绝不重复归档（重复会让 restoreAll/翻页出现重复消息）
+                    S.lastError = 'overlap:' + ov.id;
+                    return { stop: 'overlap' };
+                }
+            }
+            var needWrite = !oldItem || num(oldItem.count) !== rec.count;
+            var nextItems = [];
+            for (var k = 0; k < index.items.length; k++) if (index.items[k].id !== rec.id) nextItems.push(index.items[k]);
+            nextItems.push({ id: rec.id, from: rec.from, to: rec.to, count: rec.count, fromId: firstKey, toId: lastKey, at: Date.now() });
+            nextItems.sort(function (a, b) { return a.from - b.from; });
+            var total = 0;
+            for (var t = 0; t < nextItems.length; t++) total += num(nextItems[t].count);
+            var nextIndex = { items: nextItems, archivedCount: total, updatedAt: Date.now() };
+
+            var pre = needWrite ? writeChunkAtomic(rec, nextIndex) : Promise.resolve(null);
+            return pre.then(function () {
+                return readChunk(rec.id);                      // 回读
+            }).then(function (back) {
+                var v = verifyChunk(back, draft);              // 校验
+                if (!v.ok) {
+                    S.fatal = true;                             // 校验不一致：彻底停手（绝不删、绝不重试覆盖）
+                    S.lastError = 'verify:' + v.why + (v.at != null ? ('@' + v.at) : '');
+                    warn('chunk 回读校验不一致，已放弃本次归档（消息留在内存里）', v);
+                    return { stop: 'verify-failed', detail: v };
+                }
+                // ===== 到这里才算"已持久化 + 校验通过"，允许从内存移除 =====
+                var arr2 = msLiveMessages();
+                if (arr2 !== arr || arr2[0] !== draft[0]) {
+                    S.lastError = 'array-changed';
+                    return { stop: 'array-changed' };          // 期间主程序整体换了数组（如 loadData）：不删
+                }
+                var removed = arr2.splice(0, draft.length);
+                if (removed.length !== draft.length) {
+                    try { arr2.unshift.apply(arr2, removed); } catch (e) {}   // 理论不可达；回滚保命
+                    S.fatal = true;
+                    S.lastError = 'splice-mismatch';
+                    return { stop: 'splice-failed' };
+                }
+                S.index = normalizeIndex({ items: nextItems, archivedCount: total, updatedAt: Date.now() });
+                S.indexLoaded = true;
+                S.chunkCount = S.index.items.length;
+                S.archivedCount = S.index.archivedCount;
+                S.archivedBefore = arr2.length ? tsNum(arr2[0].timestamp) : (rec.to + 1);
+                S.loadedIds = {};                              // 头部消息被移走了：之前"已载入"的块重新变成可载入
+                S.removedTotal += removed.length;
+                S.lastArchiveAt = Date.now();
+                writeMetaToFD();                               // 只改 featureData.msgStore
+                return { ok: true, count: removed.length };
+            }, function (err) {
+                // 写入/回读抛错（配额满、事务失败…）：本次会话彻底停手，消息一条都没动
+                S.fatal = true;
+                S.lastError = 'write-failed:' + String((err && err.message) || err);
+                warn('chunk 写入失败，已停手（消息留在内存里，一条都没删）', err);
+                return { stop: 'write-failed' };
+            });
+        }, function (err) {
+            S.lastError = 'index:' + String((err && err.message) || err);
+            return { stop: 'index-failed' };
+        });
+    }
+    function archiveNow(opts) {
+        opts = opts || {};
+        var minExcess = Math.max(1, num(opts.minExcess) || 1);
+        if (S.fatal) return Promise.resolve({ ok: false, reason: 'fatal' });
+        if (!idbFactory()) { S.noIDB = true; return Promise.resolve({ ok: false, reason: 'no-indexeddb' }); }
+        if (S.paused && !opts.force) return Promise.resolve({ ok: false, reason: 'paused' });
+        if (S.running) return Promise.resolve({ ok: false, reason: 'busy' });
+        if (msHidden() && !opts.force) return Promise.resolve({ ok: false, reason: 'hidden' });
+        var arr = msLiveMessages();
+        if (!arr) return Promise.resolve({ ok: false, reason: 'no-messages' });
+        if (arr.length - MEM_LIMIT < minExcess) return Promise.resolve({ ok: false, reason: 'under-limit', inMemory: arr.length });
+        if (!msDataLoaded()) return Promise.resolve({ ok: false, reason: 'not-loaded' });
+
+        S.running = true;
+        var removed = 0, steps = 0, stop = '';
+        function loop() {
+            if (S.fatal) { stop = stop || 'fatal'; return Promise.resolve(); }
+            if (msHidden() && !opts.force) { stop = stop || 'hidden'; return Promise.resolve(); }
+            var cur = msLiveMessages();
+            if (!cur) { stop = stop || 'no-array'; return Promise.resolve(); }
+            if (cur.length - MEM_LIMIT < minExcess) return Promise.resolve();
+            if (steps++ >= 200) { stop = 'step-limit'; return Promise.resolve(); }
+            return archiveStep().then(function (r) {
+                if (r && r.ok && r.count > 0) { removed += r.count; return loop(); }
+                stop = stop || (r && r.stop) || 'unknown';
+            });
+        }
+        return loop().then(function () {
+            S.running = false;
+            S.firstArchiveDone = true;
+            if (removed > 0) msSave();                          // 落盘（此时 messages 里只剩 600 条）
+            if (stop && stop !== 'complete' && stop !== 'hidden') S.lastError = 'archive-stop:' + stop;
+            return { ok: removed > 0, removed: removed, stop: stop };
+        }, function (err) {
+            S.running = false;
+            S.firstArchiveDone = true;
+            S.lastError = 'archive:' + String((err && err.message) || err);
+            return { ok: removed > 0, removed: removed, stop: 'exception' };
+        });
+    }
+
+    /* ============================================================
+     * 7. 向上翻页：把一块（300 条）插回 messages 头部
+     * ============================================================ */
+    // ① 直接改主程序闭包里的 renderWindowSize（注入点在主 IIFE 内时可用）
+    function growRenderWindowDirect(n) {
+        try {
+            if (typeof renderWindowSize === 'number') {
+                renderWindowSize = renderWindowSize + n;
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+    // ② 兜底：模拟点击主程序自带的「显示更早的消息」按钮，每点一次 +RENDER_WINDOW_STEP
+    function growByClicking(steps) {
+        var done = 0;
+        try {
+            var prev = S.injecting;
+            S.injecting = true;
+            var max = Math.min(40, Math.max(1, steps | 0));
+            for (var i = 0; i < max; i++) {
+                var b = findEarlierButton();
+                if (!b) break;
+                if (typeof b.click === 'function') b.click();
+                else if (typeof b.dispatchEvent === 'function') b.dispatchEvent({ type: 'click' });
+                else break;
+                done++;
+            }
+            S.injecting = prev;
+            if (done > 0) { try { afterRender(); } catch (e2) {} }   // 点完再做一次"要不要补按钮"的判断
+        } catch (e) { S.injecting = false; }
+        return done;
+    }
+    function loadEarlier(opts) {
+        opts = opts || {};
+        if (S.loadingEarlier) return Promise.resolve({ ok: false, reason: 'busy' });
+        if (!idbFactory()) return Promise.resolve({ ok: false, reason: 'no-indexeddb' });
+        var arr0 = msLiveMessages();
+        if (!arr0) return Promise.resolve({ ok: false, reason: 'no-messages' });
+        S.loadingEarlier = true;
+        return readIndex().then(function (index) {
+            if (!index.items.length) return { ok: false, reason: 'no-chunks' };
+            var memFrom = arr0.length ? tsNum(arr0[0].timestamp) : Infinity;
+            var pool = [];
+            for (var i = 0; i < index.items.length; i++) {
+                var it = index.items[i];
+                if (S.loadedIds[it.id]) continue;
+                if (arr0.length && !(it.to <= memFrom)) continue;   // 只要比内存最旧那条更早的块
+                pool.push(it);
+            }
+            if (!pool.length) return { ok: false, reason: 'no-earlier' };
+            var pick = pool[pool.length - 1];                   // 最新的那块（紧挨着内存头部）
+            return readChunk(pick.id).then(function (rec) {
+                if (!verifyLoaded(rec, pick)) {
+                    S.lastError = 'load-verify:' + pick.id;
+                    warn('chunk 回读不一致，放弃本次载入（内存不动）', pick.id);
+                    return { ok: false, reason: 'verify-failed', chunkId: pick.id };
+                }
+                var arr = msLiveMessages();
+                if (arr !== arr0) return { ok: false, reason: 'array-changed' };
+                var have = {};
+                for (var h = 0; h < arr.length; h++) have[keyOf(arr[h])] = 1;
+                var fresh = [];
+                for (var j = 0; j < rec.data.length; j++) {
+                    var m = rec.data[j];
+                    var k = keyOf(m);
+                    if (have[k]) continue;                      // 已在内存里的不重复插
+                    have[k] = 1;
+                    fresh.push(m);
+                }
+                if (!fresh.length) {
+                    S.loadedIds[pick.id] = true;
+                    return { ok: false, reason: 'already-in-memory', chunkId: pick.id, count: 0 };
+                }
+                // 按时间戳找插入点（正常情况下就是 0：归档块严格早于内存头部）
+                var firstTs = tsNum(fresh[0].timestamp);
+                var pos = 0;
+                while (pos < arr.length && tsNum(arr[pos].timestamp) < firstTs) pos++;
+                var el = findContainer();
+                var before = el ? { top: num(el.scrollTop), h: num(el.scrollHeight) } : null;
+                try {
+                    var args = [pos, 0];
+                    for (var q = 0; q < fresh.length; q++) args.push(fresh[q]);
+                    Array.prototype.splice.apply(arr, args);
+                } catch (e) {
+                    try { for (var q2 = fresh.length - 1; q2 >= 0; q2--) arr.splice(pos, 0, fresh[q2]); } catch (e2) {
+                        return { ok: false, reason: 'splice-failed' };
+                    }
+                }
+                S.loadedIds[pick.id] = true;
+                var grew = growRenderWindowDirect(fresh.length);  // 让主程序的渲染窗口覆盖到新载入的这一块
+                msRender();
+                if (!grew) growByClicking(Math.ceil(fresh.length / 80) + 1);   // 拿不到闭包变量时补点按钮
+                if (el && before) {
+                    try { el.scrollTop = before.top + (num(el.scrollHeight) - before.h); } catch (e3) {}
+                }
+                return { ok: true, count: fresh.length, chunkId: pick.id, inMemory: arr.length };
+            });
+        }).then(function (r) {
+            S.loadingEarlier = false;
+            return r;
+        }, function (err) {
+            S.loadingEarlier = false;
+            S.lastError = 'load-earlier:' + String((err && err.message) || err);
+            return { ok: false, reason: 'exception', error: S.lastError };
+        });
+    }
+
+    /* ============================================================
+     * 8. restoreAll：把所有 chunk 顺序拉回内存（可回退）
+     * ============================================================ */
+    function restoreAll() {
+        if (!idbFactory()) return Promise.resolve({ ok: false, reason: 'no-indexeddb' });
+        if (S.restoring) return Promise.resolve({ ok: false, reason: 'busy' });
+        S.restoring = true;
+        var arr0 = msLiveMessages();
+        return readIndex().then(function (index) {
+            if (!index.items.length) return { ok: false, reason: 'no-chunks', inMemory: arr0 ? arr0.length : 0 };
+            var collected = [];
+            var chain = Promise.resolve();
+            index.items.forEach(function (it) {
+                chain = chain.then(function () {
+                    return readChunk(it.id).then(function (rec) {
+                        if (!verifyLoaded(rec, it)) throw new Error('chunk-verify:' + it.id);
+                        for (var i = 0; i < rec.data.length; i++) collected.push(rec.data[i]);
+                    });
+                });
+            });
+            return chain.then(function () {
+                var arr = msLiveMessages();
+                if (!arr || arr !== arr0) return { ok: false, reason: 'array-changed' };
+                var seen = {}, merged = [];
+                var i;
+                for (i = 0; i < collected.length; i++) {
+                    var k1 = keyOf(collected[i]);
+                    if (seen[k1]) continue;
+                    seen[k1] = 1;
+                    merged.push(collected[i]);
+                }
+                for (i = 0; i < arr.length; i++) {
+                    var k2 = keyOf(arr[i]);
+                    if (seen[k2]) continue;
+                    seen[k2] = 1;
+                    merged.push(arr[i]);
+                }
+                var added = merged.length - arr.length;
+                try {
+                    arr.length = 0;
+                    for (var j = 0; j < merged.length; j++) arr.push(merged[j]);
+                } catch (e) {
+                    return { ok: false, reason: 'splice-failed' };
+                }
+                S.paused = true;                            // 用户显式回退：本会话不再自动归档（避免刚拉回又切走）
+                S.loadedIds = {};
+                msRender();
+                log('restoreAll 完成：' + merged.length + ' 条（新拉回 ' + added + ' 条）');
+                return { ok: true, restored: added, total: merged.length, chunks: index.items.length };
+            });
+        }).then(function (r) {
+            S.restoring = false;
+            return r;
+        }, function (err) {
+            S.restoring = false;
+            S.lastError = 'restore:' + String((err && err.message) || err);
+            return { ok: false, reason: 'exception', error: S.lastError };
+        });
+    }
+
+    /* ============================================================
+     * 9. 渲染后：内存里已经没有更早的消息、但库里还有 → 补一个按钮
+     * ============================================================ */
+    function hasUnloadedChunk(arr) {
+        if (!S.index || !S.index.items.length) return false;
+        var memFrom = arr.length ? tsNum(arr[0].timestamp) : Infinity;
+        for (var i = 0; i < S.index.items.length; i++) {
+            var it = S.index.items[i];
+            if (S.loadedIds[it.id]) continue;
+            if (!arr.length || it.to <= memFrom) return true;
+        }
+        return false;
+    }
+    function onEarlierButton(btn) {
+        if (!btn || btn.disabled) return;
+        var oldText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '正在载入更早的消息';
+        loadEarlier().then(function (r) {
+            if (r && r.ok) return;                          // 成功：loadEarlier 内部已重渲染，按钮被新 DOM 取代
+            btn.textContent = (r && r.reason === 'no-earlier') ? '更早的消息已全部载入' : '暂时无法载入更早的消息';
+            setTimeout(function () {
+                try { btn.disabled = false; btn.textContent = oldText; } catch (e) {}
+            }, 1500);
+        }, function () {
+            try { btn.textContent = '暂时无法载入更早的消息'; btn.disabled = false; } catch (e) {}
+        });
+    }
+    function injectButton(ctr) {
+        var d = doc();
+        if (!d || !d.createElement) return false;
+        var btn = null;
+        try {
+            var tpl = d.getElementById ? d.getElementById('ms-tpl-earlier') : null;
+            if (tpl && tpl.content && tpl.content.firstElementChild) btn = tpl.content.firstElementChild.cloneNode(true);
+        } catch (e) {}
+        if (!btn) {
+            btn = d.createElement('button');
+            btn.type = 'button';
+            btn.className = 'load-earlier-btn ms-load-earlier';
+        }
+        try { if (btn.dataset) btn.dataset.ms = 'earlier'; } catch (e2) {}
+        btn.textContent = '显示更早的消息（已归档 ' + S.archivedCount + ' 条）';
+        btn.addEventListener('click', function (ev) {
+            try { if (ev && ev.preventDefault) ev.preventDefault(); if (ev && ev.stopPropagation) ev.stopPropagation(); } catch (e) {}
+            onEarlierButton(btn);
+        });
+        try {
+            var spacer = ctr.firstElementChild;
+            if (spacer && spacer.nextSibling) ctr.insertBefore(btn, spacer.nextSibling);
+            else ctr.appendChild(btn);
+            return true;
+        } catch (e3) {
+            try { ctr.appendChild(btn); return true; } catch (e4) {}
+        }
+        return false;
+    }
+    function afterRender() {
+        if (S.injecting || S.restoring) return;
+        if (S.metaResetPaused) return;
+        var d = doc();
+        if (!d) return;
+        var ctr = findContainer();
+        if (!ctr || !ctr.querySelector) return;
+        var arr = msLiveMessages();
+        if (!arr || !arr.length) return;
+        if (S.chunkCount <= 0) return;
+        if (!hasUnloadedChunk(arr)) return;
+        try {
+            if (ctr.querySelector('.ms-load-earlier')) return;
+            if (ctr.querySelector('.load-earlier-btn')) return;   // 主程序自带的按钮还在：先把内存里的看完
+        } catch (e) { return; }
+        injectButton(ctr);
+    }
+
+    /* ============================================================
+     * 10. 包装（只包一层、透传返回值、异常兜住）
+     * ============================================================ */
+    function wrapRender() {
+        var orig = null;
+        try { if (typeof renderMessages === 'function') orig = renderMessages; } catch (e) {}
+        if (orig && !orig.__msWrapped) {
+            var w = function () {
+                var ret = orig.apply(this, arguments);
+                try { afterRender(); } catch (e) {}
+                return ret;
+            };
+            w.__msWrapped = true;
+            w.__msOrig = orig;
+            try { renderMessages = w; } catch (e2) {}
+            try { if (window.renderMessages === orig) window.renderMessages = w; } catch (e3) {}
+            S.wrapped.render = true;
+            return;
+        }
+        try {
+            if (typeof window.renderMessages === 'function' && !window.renderMessages.__msWrapped) {
+                var o2 = window.renderMessages;
+                var w2 = function () {
+                    var ret2 = o2.apply(this, arguments);
+                    try { afterRender(); } catch (e) {}
+                    return ret2;
+                };
+                w2.__msWrapped = true;
+                w2.__msOrig = o2;
+                window.renderMessages = w2;
+                S.wrapped.render = true;
+            }
+        } catch (e4) {}
+    }
+    function makeSaveWrapper(orig) {
+        var w = function () {
+            try { syncMeta(); } catch (e) {}
+            var ret = orig.apply(this, arguments);
+            try { S.lastSaveAt = Date.now(); } catch (e2) {}
+            return ret;
+        };
+        w.__msWrapped = true;
+        w.__msOrig = orig;
+        return w;
+    }
+    function wrapSave() {
+        try {
+            if (typeof saveData === 'function' && !saveData.__msWrapped) {
+                var w = makeSaveWrapper(saveData);
+                saveData = w;
+                try { if (window.saveData === w.__msOrig) window.saveData = w; } catch (e) {}
+                S.wrapped.save = true;
+            }
+        } catch (e2) {}
+        try {
+            if (typeof window.saveData === 'function' && !window.saveData.__msWrapped) {
+                window.saveData = makeSaveWrapper(window.saveData);
+                S.wrapped.save = true;
+            }
+        } catch (e3) {}
+    }
+    function wrapFlush() {
+        try {
+            if (typeof flushSave === 'function' && !flushSave.__msWrapped) {
+                var w = makeSaveWrapper(flushSave);
+                flushSave = w;
+                try { if (window.flushSave === w.__msOrig) window.flushSave = w; } catch (e) {}
+                S.wrapped.flush = true;
+            }
+        } catch (e2) {}
+        try {
+            if (typeof window.flushSave === 'function' && !window.flushSave.__msWrapped) {
+                window.flushSave = makeSaveWrapper(window.flushSave);
+                S.wrapped.flush = true;
+            }
+        } catch (e3) {}
+    }
+    function installWrappers() {
+        wrapRender();
+        wrapSave();
+        wrapFlush();
+    }
+
+    /* ============================================================
+     * 11. 唯一的"下一轮"定时器：串行、可中断、可续做
+     * ============================================================ */
+    function scheduleTick(delay) {
+        try {
+            if (S.tickTimer) { clearTimeout(S.tickTimer); S.tickTimer = null; }
+            S.tickTimer = setTimeout(onTick, Math.max(0, num(delay)));
+        } catch (e) {}
+    }
+    function ensureIndex() {
+        if (S.indexLoaded) return Promise.resolve(S.index);
+        return readIndex();
+    }
+    function onTick() {
+        S.tickTimer = null;
+        try {
+            if (S.fatal) return;                            // 致命错误：彻底停手，不再排下一轮
+            checkFdIdentity();
+            if (!S.ready) {
+                if (msDataLoaded()) {
+                    S.ready = true;
+                    S.readyAt = Date.now();
+                    ensureIndex().then(function () {
+                        scheduleTick(BOOT_DELAY);           // 数据就绪后再等 3 秒（空闲时）才归档
+                    }, function () {
+                        scheduleTick(TICK_FAST);
+                    });
+                } else {
+                    S.polls = (S.polls | 0) + 1;                       // 迟迟没就绪：逐步退避，别一直 400ms 打点
+                    scheduleTick(S.polls > 300 ? 15000 : (S.polls > 60 ? 2000 : TICK_FAST));
+                }
+                return;
+            }
+            if (msHidden()) { scheduleTick(9000); return; }  // document.hidden：暂停归档（低频看一下是否回前台）
+            if (!S.indexLoaded) {
+                ensureIndex().then(function () { scheduleTick(TICK_FAST); }, function () { scheduleTick(TICK_IDLE); });
+                return;
+            }
+            var arr = msLiveMessages();
+            if (!arr) { scheduleTick(TICK_IDLE); return; }
+            var excess = arr.length - MEM_LIMIT;
+            if (excess <= 0) { S.firstArchiveDone = true; S.catchingUp = false; scheduleTick(TICK_IDLE); return; }
+            if (S.running) { scheduleTick(1500); return; }
+            if (S.paused) { scheduleTick(TICK_IDLE); return; }
+            if (!S.firstArchiveDone) {
+                var wait = (S.readyAt + BOOT_DELAY) - Date.now();
+                if (wait > 0) { scheduleTick(wait); return; }
+            }
+            // 触发门槛：首次补齐一有超出就做；之后的"日常维护"攒够一整块(300)再做，避免 1 条一块的碎片。
+            // 但被打断过（catchingUp）或者还没补齐到 600，就继续按 1 条的门槛续做。
+            var need = (S.firstArchiveDone && !S.catchingUp) ? CHUNK_SIZE : 1;
+            if (excess < need) { scheduleTick(TICK_IDLE); return; }
+            // 上次因为"与已有块重叠"停下、且内存头部没变：不再反复尝试（避免每次 tick 都白读一遍索引）
+            if (S.parkedHead != null && arr.length && tsNum(arr[0].timestamp) === S.parkedHead) { scheduleTick(TICK_IDLE); return; }
+            archiveNow({ minExcess: 1 }).then(function (r) {
+                var st = stats();
+                S.catchingUp = st.inMemory > MEM_LIMIT && !S.fatal;   // 还没补齐：下次继续
+                if (r && r.stop === 'overlap') {
+                    var a2 = msLiveMessages();
+                    S.parkedHead = (a2 && a2.length) ? tsNum(a2[0].timestamp) : 0;
+                    S.catchingUp = false;
+                } else {
+                    S.parkedHead = null;
+                }
+                if (r && r.ok) log('归档完成：本次移出 ' + r.removed + ' 条，内存 ' + st.inMemory + ' 条，库中 ' + st.chunkCount + ' 块');
+                scheduleTick(st.inMemory - MEM_LIMIT >= CHUNK_SIZE ? 5000 : TICK_IDLE);
+            }, function () {
+                scheduleTick(TICK_IDLE);
+            });
+        } catch (e) {
+            scheduleTick(TICK_IDLE);
+        }
+    }
+    function installVisibility() {
+        try {
+            var d = doc();
+            if (!d || !d.addEventListener) return;
+            d.addEventListener('visibilitychange', function () {
+                try {
+                    if (msHidden()) return;                 // 切到后台：不动
+                    if (S.fatal || S.paused) return;
+                    if (S.tickTimer == null) scheduleTick(1200);
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+    function requestPersist() {
+        try {
+            if (S.persistAsked) return;
+            S.persistAsked = true;
+            var nav = window.navigator;
+            if (!nav || !nav.storage || typeof nav.storage.persist !== 'function') return;
+            var p = nav.storage.persist();
+            if (p && typeof p.then === 'function') {
+                p.then(function (ok) { S.persisted = !!ok; }, function () { S.persisted = false; });
+            }
+        } catch (e) {}
+    }
+
+    /* ============================================================
+     * 12. 对外接口
+     * ============================================================ */
+    function stats() {
+        var arr = msLiveMessages();
+        return {
+            inMemory: arr ? arr.length : 0,
+            archivedCount: S.archivedCount | 0,
+            chunkCount: S.chunkCount | 0,
+            archivedBefore: (S.archivedBefore == null) ? null : num(S.archivedBefore),
+            memoryLimit: MEM_LIMIT,
+            chunkSize: CHUNK_SIZE,
+            available: !!idbFactory() && !S.fatal && !S.noIDB,
+            paused: S.paused,
+            fatal: S.fatal,
+            hidden: msHidden(),
+            loadedChunks: (function () { var n = 0; for (var k in S.loadedIds) if (S.loadedIds[k]) n++; return n; })(),
+            removedTotal: S.removedTotal,
+            persisted: S.persisted,
+            lastError: S.lastError,
+            version: VER
+        };
+    }
+    function listChunks() {
+        return readIndex().then(function (idx) { return idx.items.slice(); }, function () { return []; });
+    }
+    function clearArchives() {
+        if (!idbFactory()) return Promise.resolve({ ok: false, reason: 'no-indexeddb' });
+        return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx;
+                try {
+                    tx = db.transaction([STORE, META_STORE], 'readwrite');
+                    tx.objectStore(STORE).clear();
+                    tx.objectStore(META_STORE).clear();
+                } catch (e) { reject(e); return; }
+                tx.oncomplete = function () {
+                    S.index = normalizeIndex(null);
+                    S.indexLoaded = true;
+                    S.chunkCount = 0;
+                    S.archivedCount = 0;
+                    S.archivedBefore = null;
+                    S.loadedIds = {};
+                    writeMetaToFD();
+                    resolve({ ok: true });
+                };
+                tx.onerror = function () { reject(tx.error || new Error('clear-failed')); };
+                tx.onabort = function () { reject(tx.error || new Error('clear-aborted')); };
+            });
+        }).then(function (r) {
+            msNotify('已清空归档（内存里的消息不受影响）', 'success');
+            msRender();                                  // 让按钮/列表回到"没有更早"的状态
+            return r;
+        }, function (err) {
+            S.lastError = 'clear:' + String((err && err.message) || err);
+            return { ok: false, reason: 'exception' };
+        });
+    }
+
+    function exposeDebug() {
+        var api = {
+            stats: stats,
+            archive: function (opts) {
+                var o = {};
+                for (var k in (opts || {})) if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k];
+                o.force = true;                       // 显式调试调用：允许绕过 paused / hidden（数据红线不变）
+                return archiveNow(o);
+            },
+            loadEarlier: loadEarlier,
+            restoreAll: restoreAll,
+            chunks: listChunks,
+            clearArchives: clearArchives,
+            pause: function () { S.paused = true; return stats(); },
+            resume: function () { S.paused = false; scheduleTick(800); return stats(); },
+            version: VER
+        };
+        try { window.msDebug = api; } catch (e) {}
+        return api;
+    }
+
+    function initMsgStoreFeature() {
+        if (S.inited) return window.msDebug || true;
+        S.inited = true;
+        try {
+            if (!idbFactory()) {
+                S.noIDB = true;
+                log('浏览器没有 IndexedDB：完全不动作，原功能不受影响');
+                return window.msDebug || true;
+            }
+            S.fdRef = msFD();
+            try {
+                var ms = (S.fdRef && S.fdRef.msgStore && typeof S.fdRef.msgStore === 'object') ? S.fdRef.msgStore : null;
+                if (ms && ms.archivedBefore != null) S.archivedBefore = num(ms.archivedBefore);
+                if (ms && ms.chunkCount != null) S.chunkCount = Math.max(0, Math.floor(num(ms.chunkCount)));
+            } catch (e) {}
+            installWrappers();
+            requestPersist();
+            installVisibility();
+            scheduleTick(TICK_FAST);
+            log('已启用：内存窗口 ' + MEM_LIMIT + ' 条 / 每块 ' + CHUNK_SIZE + ' 条 / 库 ' + DB_NAME);
+        } catch (e2) {
+            S.fatal = true;
+            S.lastError = 'init:' + String((e2 && e2.message) || e2);
+            warn('初始化失败（保持原样）', e2);
+        }
+        return window.msDebug || true;
+    }
+
+    /* ============================================================
+     * 13. 启动
+     * ============================================================ */
+    window.initMsgStoreFeature = initMsgStoreFeature;
+    exposeDebug();
+    try { initMsgStoreFeature(); } catch (e) { warn('初始化失败（保持原样）', e); }
+})();
+
+})();
 /* ===== 功能模块：memrevert ===== */
 /* ===== 反迁移：把外置的聊天图片搬回消息数据（回退内存优化，防 IndexedDB 被清导致丢图） ===== */
 (function () {
