@@ -14188,35 +14188,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
-/* ===== 功能模块：islbadge ===== */
-/* ===== 保活状态可见标签（诊断用，点一下看完整状态） ===== */
-(function () {
-    function mk() {
-        if (document.getElementById('islBadge')) return;
-        var b = document.createElement('div');
-        b.id = 'islBadge';
-        b.style.cssText = 'position:fixed;left:6px;top:52%;z-index:99999;font-size:10px;line-height:1.35;padding:5px 7px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-family:ui-monospace,monospace;max-width:46vw;word-break:break-all;';
-        b.textContent = '保活读取中…';
-        b.addEventListener('click', function () {
-            var s = {};
-            try { s = window.__islandDebug ? window.__islandDebug() : { err: 'no debug fn' }; } catch (e) { s = { err: String(e) }; }
-            var txt = JSON.stringify(s);
-            try { if (typeof window.iosAlert === 'function') { window.iosAlert(txt, { title: '保活完整状态' }); return; } } catch (e) {}
-            try { alert(txt); } catch (e) {}
-        });
-        try { document.body.appendChild(b); } catch (e) {}
-    }
-    function upd() {
-        mk();
-        var b = document.getElementById('islBadge');
-        if (!b) return;
-        var s = {};
-        try { s = window.__islandDebug ? window.__islandDebug() : {}; } catch (e) {}
-        b.textContent = '保活 ' + (s.on ? '设置开' : '设置关') + ' / ' + (s.strong ? '强' : '弱') + ' / ' + (s.audioTag ? (s.paused ? '音频停' : '音频播' + (s.readyState || 0)) : '无元素') + ' / ' + (s.metadata ? '会话✓' : '会话✗') + ' / ' + (s.playbackState || '-');
-    }
-    try { setTimeout(upd, 1200); setInterval(upd, 3000); } catch (e) {}
-    window.__islBadge = upd;
-})();
+/* ===== 功能模块：islbadge（诊断标签已移除，__islandDebug() 仍可用） ===== */
 /* ===== 功能模块：island ===== */
 /* ===== 灵动岛 / 后台保活：iOS 必须在用户手势内启动音频 ===== */
 (function () {
