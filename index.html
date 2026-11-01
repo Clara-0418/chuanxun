@@ -14260,6 +14260,71 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：stickerslim2 ===== */
+/* ===== 表情包上传时压缩（120px，不改结构、不碰全局接口） ===== */
+(function () {
+    var IDS = ['stickerUpload', 'memeImageUpload', 'stickerImgUpload', 'stickerImgInput'];
+    var MAXSIDE = 120, Q = 0.75;
+    function wantCompress(f) {
+        if (!f || !f.type || f.type.indexOf('image/') !== 0) return false;
+        if (/gif|svg/i.test(f.type)) return false;
+        return true;
+    }
+    function compress(f, cb) {
+        try {
+            var r = new FileReader();
+            r.onload = function (e) {
+                var img = new Image();
+                img.onload = function () {
+                    try {
+                        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+                        if (!w || !h) { cb(null); return; }
+                        var sc = Math.min(1, MAXSIDE / Math.max(w, h));
+                        if (sc >= 0.98 && f.type === 'image/jpeg') { cb(null); return; }
+                        var cv = document.createElement('canvas');
+                        cv.width = Math.max(1, Math.round(w * sc));
+                        cv.height = Math.max(1, Math.round(h * sc));
+                        var cx = cv.getContext('2d');
+                        cx.drawImage(img, 0, 0, cv.width, cv.height);
+                        cv.toBlob(function (b) {
+                            try {
+                                if (!b || b.size >= f.size) { cb(null); return; }
+                                cb(new File([b], 'sticker.jpg', { type: 'image/jpeg' }));
+                            } catch (x) { cb(null); }
+                        }, 'image/jpeg', Q);
+                    } catch (err) { cb(null); }
+                };
+                img.onerror = function () { cb(null); };
+                img.src = e.target.result;
+            };
+            r.onerror = function () { cb(null); };
+            r.readAsDataURL(f);
+        } catch (e) { cb(null); }
+    }
+    function bindOne(el) {
+        if (!el || el.dataset.slimBound === '1') return;
+        el.dataset.slimBound = '1';
+        el.addEventListener('change', function (ev) {
+            var f = el.files && el.files[0];
+            if (!f) return;
+            if (el.dataset.slimPass === '1') { el.dataset.slimPass = '0'; return; }
+            if (!wantCompress(f)) return;
+            try { ev.stopImmediatePropagation(); } catch (e) {}
+            compress(f, function (nf) {
+                try {
+                    if (nf) { var dt = new DataTransfer(); dt.items.add(nf); el.files = dt.files; }
+                } catch (e) {}
+                el.dataset.slimPass = '1';
+                try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+            });
+        }, true);
+    }
+    function bind() { for (var i = 0; i < IDS.length; i++) { try { bindOne(document.getElementById(IDS[i])); } catch (e) {} } }
+    function boot() { bind(); setTimeout(bind, 800); setTimeout(bind, 2500); setTimeout(bind, 6000); setTimeout(bind, 12000); }
+    boot();
+    try { document.addEventListener('click', function () { setTimeout(bind, 300); }, true); } catch (e) {}
+    window.__stickerSlimBind = bind;
+})();
 /* ===== 功能模块：radufix ===== */
 /* ===== 恢复原生 FileReader（表情压缩模块包装了 readAsDataURL，导致导入设置预设失败） ===== */
 (function () {
