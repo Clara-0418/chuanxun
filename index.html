@@ -16585,6 +16585,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
     function showLog() {
         var raw = '（无记录）';
         try { raw = window.localStorage.getItem(KEY) || '（无记录）'; } catch (e) { raw = '（读不到本地存储）'; }
+        try { if (window.__islandDebug) { raw += '  [保活状态] ' + JSON.stringify(window.__islandDebug()); } } catch (e) {}
         try { if (typeof window.iosAlert === 'function') { window.iosAlert(raw, { title: '最近崩溃日志' }); return; } } catch (e) {}
         try { alert(raw); } catch (e) {}
     }
