@@ -7305,6 +7305,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== Dock 高度实测补偿（原来写死 88px，iPhone 安全区大时会遮住内容） ===== */
         #hm2Root { padding-bottom: calc(var(--hm2-dock-h, 88px) + 6px) !important; }
 
+        /* ===== 按用户要求：去掉「我的步数」的手动修改入口（只保留传感器计步） ===== */
+        #togetherMyStepsBtn { display: none !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -13412,6 +13415,10 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                     try { var __mchk = readLocalMirror(); dataLoaded = !!(__mchk && Array.isArray(__mchk.messages) && __mchk.messages.length > 0); } catch (e) { dataLoaded = false; }
                     if (!dataLoaded) { try { showNotification('存储异常：为避免覆盖旧数据，本次不保存。请完全关闭后重开', 'warning', 6000); } catch (e) {} }
                     bootUI();
+                    // 兜底路径也要启动这些定时器（否则后台保活/朋友圈自动更新/他的手机刷新整场不工作）
+                    try { if (typeof startMomentTimer === 'function') startMomentTimer(); } catch (e) {}
+                    try { if (typeof startPartnerAutoSendTimer === 'function') startPartnerAutoSendTimer(); } catch (e) {}
+                    try { if (typeof startKeepAlive === 'function') startKeepAlive(); } catch (e) {}
                 }, 8000);
             }
 
