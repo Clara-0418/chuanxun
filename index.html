@@ -14188,6 +14188,47 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：island ===== */
+/* ===== 灵动岛 / 后台保活：iOS 必须在用户手势内启动音频 ===== */
+(function () {
+    function arm() {
+        try { if (typeof startDynamicIslandAudio === 'function') startDynamicIslandAudio(); } catch (e) {}
+    }
+    function armed() {
+        arm();
+        setTimeout(arm, 600);
+        setTimeout(arm, 2500);
+    }
+    var done = false;
+    function once() {
+        if (done) return;
+        done = true;
+        try { document.removeEventListener('pointerdown', once, true); } catch (e) {}
+        try { document.removeEventListener('touchstart', once, true); } catch (e) {}
+        try { document.removeEventListener('click', once, true); } catch (e) {}
+        armed();
+    }
+    try { document.addEventListener('pointerdown', once, true); } catch (e) {}
+    try { document.addEventListener('touchstart', once, true); } catch (e) {}
+    try { document.addEventListener('click', once, true); } catch (e) {}
+    // 回到前台时续上播放通道
+    try {
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) { setTimeout(arm, 400); setTimeout(arm, 1500); }
+        });
+    } catch (e) {}
+    // 每 2 分钟续一次，防止系统回收播放通道
+    try { setInterval(function () { if (!document.hidden) arm(); }, 120000); } catch (e) {}
+    // 排查用：在控制台看 __islandDebug() 就知道卡在哪一步
+    window.__islandDebug = function () {
+        var r = { on: false, strong: false, audioTag: false, paused: null, readyState: null, mediaSession: !!navigator.mediaSession, metadata: false, playbackState: null, audioSessionType: null };
+        try { r.on = !!settings.dynamicIslandAudio; r.strong = !!settings.keepAliveStrong; } catch (e) {}
+        try { var a = window.bgAudio || null; if (!a) { try { a = ensureBackgroundAudio(); } catch (e2) {} } if (a) { r.audioTag = true; r.paused = a.paused; r.readyState = a.readyState; r.srcLen = (a.currentSrc || a.src || '').length; } } catch (e) {}
+        try { r.metadata = !!(navigator.mediaSession && navigator.mediaSession.metadata); r.playbackState = navigator.mediaSession ? navigator.mediaSession.playbackState : null; } catch (e) {}
+        try { r.audioSessionType = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) {}
+        return r;
+    };
+})();
 /* ===== 功能模块：msgstore（独立作用域） ===== */
 (function(){
 
