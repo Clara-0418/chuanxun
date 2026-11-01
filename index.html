@@ -7370,6 +7370,10 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         /* ===== 按用户要求：去掉「我的步数」的手动修改入口（只保留传感器计步） ===== */
         #togetherMyStepsBtn { display: none !important; }
 
+        /* ===== 按用户要求：隐藏「后台保活 · 消息推送就绪」黑色标签 ===== */
+        #keepAliveBadge { display: none !important; }
+        #keepAliveBadge.show, #keepAliveBadge.active { display: none !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
