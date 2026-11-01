@@ -4796,6 +4796,61 @@
         }
 
         /* @@FEATURE_CSS@@ */
+/* ===== 功能模块：stickerslim ===== */
+/* 表情压缩进度提示：只在真的要压缩时短暂出现，pointer-events: none，不挡任何交互 */
+.ss-slim-pill {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    z-index: 60;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    max-width: 56vw;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--secondary-bg, #ffffff);
+    color: var(--text-secondary, #7a7a7a);
+    border: 1px solid var(--surface-border, var(--border-color, #ebebeb));
+    box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.06));
+    font-family: var(--font-family, sans-serif);
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.ss-slim-pill.ss-slim-on {
+    display: flex;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ss-slim-pill .ss-slim-dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-color, #c5a47e);
+}
+
+.ss-slim-pill .ss-slim-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ss-slim-pill {
+        transition: none;
+        transform: none;
+    }
+}
+
+
 /* ===== 功能模块：msgstore ===== */
 /* msgstore：主程序「显示更早的消息」按钮的基础样式沿用 .load-earlier-btn，这里只补充状态色（全部走主题变量） */
 .ms-load-earlier { -webkit-tap-highlight-color: transparent; }
@@ -7568,6 +7623,13 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
     </div></div>
 
     <!-- @@FEATURE_HTML@@ -->
+<!-- ===== 功能模块：stickerslim ===== -->
+<div class="ss-slim-pill" id="ssSlimPill" role="status" aria-live="polite">
+    <span class="ss-slim-dot"></span>
+    <span class="ss-slim-text" id="ssSlimText">正在压缩表情</span>
+</div>
+
+
 <!-- ===== 功能模块：msgstore ===== -->
 <!-- msgstore：可选的按钮模板（JS 找不到模板时用 document.createElement 兜底，功能完全一致） -->
 <template id="ms-tpl-earlier"><button type="button" class="load-earlier-btn ms-load-earlier" data-ms="earlier"></button></template>
@@ -13532,7 +13594,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
                 ['initStatusFeature', 'initTogetherFeature', 'initDiaryFeature', 'initHabitFeature', 'initPeriodFeature',
                     'initAccompanyFeature', 'initMusicFeature', 'initWatchFeature', 'initFontFeature',
                     'initAvatarFeature', 'initCardGroupFeature', 'initBgPresetsFeature',
-                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature', 'initMsgStoreFeature',
+                    'initCompanyFeature', 'initLoveDiaryFeature', 'initShopFeature', 'initHomeWidgetSettings', 'initStorageSlim', 'initMoment2Feature', 'initShop2Feature', 'initPay2Feature', 'initShop3Feature', 'initWalkFeature', 'initSpecFeature', 'initFixFeature', 'initMemFeature', 'initMsgStoreFeature', 'initStickerSlimFeature',
                     'initHomeLayoutFeature'
                 ].forEach(name => {
                     try { var __DEFER = { initHabitFeature: 1, initPeriodFeature: 1, initAccompanyFeature: 1, initMusicFeature: 1, initWatchFeature: 1, initCompanyFeature: 1, initLoveDiaryFeature: 1, initShopFeature: 1 }; if (__DEFER[name]) return; if (typeof window[name] === 'function') window[name](); } catch (e) { console.warn('feature init failed:', name, e); }
@@ -14188,6 +14250,1012 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：stickerslim（独立作用域） ===== */
+(function(){
+
+(function () {
+    'use strict';
+
+    var W = window;
+    if (!W || !W.document) return;
+    if (W.__ssSlimFeatureLoaded) return;      // 重复引入只跑一份
+    W.__ssSlimFeatureLoaded = true;
+
+    /* ======================= 参数 ======================= */
+    var SS_MAX = 120;             // 最长边上限（px）
+    var SS_Q = 0.7;               // 重编码质量
+    var SS_BATCH = 4;             // 每批最多 4 张（iOS 上避免一次性开太多 canvas）
+    var SS_GAP = 400;             // 批间间隔（ms），用 setTimeout，绝不用 setInterval
+    var SS_MIN_GAIN = 0.05;       // 整轮收益 < 5% → 判定「本来就小」，整轮回滚
+    var SS_BOOT_DELAY = 8000;     // 自举延迟 8 秒，避开启动高峰
+    var SS_READ_TIMEOUT = 8000;   // 单张解码超时
+    var SS_UPLOAD_WINDOW = 4000;  // 上传拦截窗口（ms）
+    var SS_PILL_HIDE = 2600;      // 提示自动消失
+    var SS_DONE_CAP = 800;        // done 集合上限，防止无限膨胀
+    var FD_KEY = 'stickerSlim';   // featureData.stickerSlim
+    var LIB_NAMES = ['stickerLibrary', 'myStickerLibrary', 'memeReplies'];
+    // 只拦这两个「表情上传」入口；聊天图片 / 头像 / 背景 / 朋友圈图一律不碰
+    var STICKER_INPUT_IDS = { stickerUpload: 1, memeImageUpload: 1 };
+
+    /* ======================= 状态 ======================= */
+    var S = {
+        booted: false,
+        bootTimer: null,
+        running: null,
+        refs: {},              // 从主程序落盘对象上蹭到的「活数组」引用
+        sniffTick: 0,          // 观察到的主程序落盘次数
+        seenSlim: {},          // 本次落盘对象里出现过的压缩结果（用于确认落盘）
+        pending: {},           // uid -> { arr, idx, prop, orig, slim } 原图暂存，落盘确认后清
+        roundGain: 0,          // 本轮已应用、尚未并入 marker 的节省字节
+        roundCommitted: 0,     // 本轮已并入 marker 的节省字节（回滚时要扣回来）
+        uploadAt: 0,           // 表情上传入口最近一次 change 的时间戳
+        nudgedAt: 0,           // 上次「催主程序落盘」的时间
+        retryPending: false,   // 还没蹭到活引用 → 拿到后补跑一轮
+        lastReport: null,
+        saving: null,          // 正在落盘的 Promise（去重）
+        nudging: null,         // 正在「催主程序落盘」的 Promise（去重）
+        pillEl: null,
+        pillTimer: null,
+        hookReader: false,
+        hookSave: false,
+        hookChange: false
+    };
+
+    /* ======================= 小工具 ======================= */
+    function ssDelay(ms) {
+        return new Promise(function (res) { setTimeout(res, ms); });
+    }
+
+    function ssWithTimeout(p, ms) {
+        return new Promise(function (res) {
+            var done = false;
+            var t = setTimeout(function () { if (!done) { done = true; res(null); } }, ms);
+            try {
+                p.then(function (v) { if (!done) { done = true; clearTimeout(t); res(v); } },
+                    function () { if (!done) { done = true; clearTimeout(t); res(null); } });
+            } catch (e) { if (!done) { done = true; clearTimeout(t); res(null); } }
+        });
+    }
+
+    function ssHidden() {
+        try { return !!(W.document && W.document.hidden); } catch (e) { return false; }
+    }
+
+    /* djb2 字符串指纹（带长度，避免不同图撞同一个 key） */
+    function ssKey(str) {
+        var h = 5381, n = str.length, i;
+        for (i = 0; i < n; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+        return (h >>> 0).toString(36) + '_' + n.toString(36);
+    }
+
+    function ssMimeOf(src) {
+        if (typeof src !== 'string') return '';
+        if (src.slice(0, 5) !== 'data:') return '';
+        var comma = src.indexOf(',');
+        if (comma < 0) return '';
+        var semi = src.indexOf(';');
+        var head = semi > 5 && semi < comma ? src.slice(5, semi) : src.slice(5, comma);
+        return head.toLowerCase().replace(/\s+/g, '');
+    }
+
+    /* 分类：'' = 不是图片表情；'gif' = 动图跳过；'remote' = 外链跳过；'img' = 可压缩 */
+    function ssKindOf(src) {
+        if (typeof src !== 'string' || !src) return '';
+        if (src.slice(0, 4).toLowerCase() === 'http') return 'remote';
+        var mime = ssMimeOf(src);
+        if (!mime) return '';
+        if (mime.indexOf('image/') !== 0) return '';
+        if (mime === 'image/gif') return 'gif';
+        return 'img';
+    }
+
+    /* 元素可能是字符串，也可能是对象（{src|url|data|image|dataUrl}） */
+    var SRC_KEYS = ['src', 'data', 'url', 'image', 'dataUrl', 'value', 'base64'];
+
+    function ssSrcInfo(item) {
+        if (typeof item === 'string') return { src: item, prop: null };
+        if (item && typeof item === 'object') {
+            for (var i = 0; i < SRC_KEYS.length; i++) {
+                var v = item[SRC_KEYS[i]];
+                if (typeof v === 'string' && v) return { src: v, prop: SRC_KEYS[i] };
+            }
+        }
+        return { src: '', prop: null };
+    }
+
+    /* ======================= featureData 标记 ======================= */
+    function ssFeatureData() {
+        try {
+            var fd = W.featureData;
+            if (fd && typeof fd === 'object' && !Array.isArray(fd)) return fd;
+        } catch (e) {}
+        try {
+            /* eslint-disable-next-line no-undef */
+            if (typeof featureData !== 'undefined' && featureData && typeof featureData === 'object' && !Array.isArray(featureData)) return featureData;
+        } catch (e2) {}
+        return null;
+    }
+
+    function ssMarker(create) {
+        var fd = ssFeatureData();
+        if (!fd) return null;
+        var m = fd[FD_KEY];
+        if (!m || typeof m !== 'object' || Array.isArray(m)) {
+            if (!create) return null;
+            m = fd[FD_KEY] = { v: 1, done: [], gain: 0, at: 0 };
+        }
+        if (!Array.isArray(m.done)) m.done = [];
+        if (typeof m.gain !== 'number' || !isFinite(m.gain) || m.gain < 0) m.gain = 0;
+        return m;
+    }
+
+    function ssDoneHas(key) {
+        var m = ssMarker(false);
+        return !!(m && m.done && m.done.indexOf(key) >= 0);
+    }
+
+    function ssDoneAdd(key) {
+        var m = ssMarker(true);
+        if (!m) return;
+        if (m.done.indexOf(key) >= 0) return;
+        m.done.push(key);
+        if (m.done.length > SS_DONE_CAP) m.done.splice(0, m.done.length - SS_DONE_CAP);
+        m.at = Date.now();
+    }
+
+    function ssDoneRemove(key) {
+        var m = ssMarker(false);
+        if (!m) return;
+        var i = m.done.indexOf(key);
+        if (i >= 0) m.done.splice(i, 1);
+    }
+
+    /* ======================= 取到「活」表情库 ======================= */
+    /* 主程序（传讯）把 stickerLibrary / myStickerLibrary / memeReplies 都放在 IIFE 闭包里，
+       只把 memeReplies 挂到了 window（快照）。所以按优先级解析：
+         1) 本文件若被注入到主 IIFE 内部 → 裸标识符直接是闭包变量（最准）
+         2) 主程序每次落盘都会把这三个数组放进 data 对象 → 我们钩 IDBObjectStore.put / JSON.stringify
+            时顺手记下引用，这是同一个数组对象，改它就是改主程序内存（次准）
+         3) window 上的快照（兜底）
+    */
+    function ssResolve(name) {
+        try {
+            if (name === 'stickerLibrary' && typeof stickerLibrary !== 'undefined' && Array.isArray(stickerLibrary)) return stickerLibrary;
+        } catch (e) {}
+        try {
+            if (name === 'myStickerLibrary' && typeof myStickerLibrary !== 'undefined' && Array.isArray(myStickerLibrary)) return myStickerLibrary;
+        } catch (e) {}
+        try {
+            if (name === 'memeReplies' && typeof memeReplies !== 'undefined' && Array.isArray(memeReplies)) return memeReplies;
+        } catch (e) {}
+        var r = S.refs[name];
+        if (Array.isArray(r)) return r;
+        try {
+            var wv = W[name];
+            if (Array.isArray(wv)) return wv;
+        } catch (e2) {}
+        return null;
+    }
+
+    function ssLibs() {
+        var out = [], seen = [], i;
+        for (i = 0; i < LIB_NAMES.length; i++) {
+            var arr = ssResolve(LIB_NAMES[i]);
+            if (!arr || seen.indexOf(arr) >= 0) continue;
+            seen.push(arr);
+            out.push({ name: LIB_NAMES[i], arr: arr });
+        }
+        return out;
+    }
+
+    /* 把主程序内存里的所有图片表情摊平成任务条目 */
+    function ssGather() {
+        var libs = ssLibs(), out = [], i, j;
+        for (i = 0; i < libs.length; i++) {
+            var name = libs[i].name, arr = libs[i].arr;
+            var len = 0;
+            try { len = arr.length | 0; } catch (e) { len = 0; }
+            for (j = 0; j < len; j++) {
+                var item = arr[j];
+                var info = ssSrcInfo(item);
+                if (!info.src) continue;
+                var kind = ssKindOf(info.src);
+                if (!kind) continue;                   // 文本 / 非图片 → 不算表情
+                out.push({
+                    lib: name,
+                    arr: arr,
+                    idx: j,
+                    item: item,
+                    src: info.src,
+                    prop: info.prop,
+                    kind: kind,
+                    key: name + '|' + ssKey(info.src)
+                });
+            }
+        }
+        return out;
+    }
+
+    function ssIsSettled(ent) {
+        if (ent.item && typeof ent.item === 'object' && ent.item.slim === 1) return true;
+        return ssDoneHas(ent.key);
+    }
+
+    /* ======================= 落盘观察：拿到活引用 + 确认落盘 ======================= */
+    function ssSniff(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        try {
+            var recognized = false;
+            var hadLive = ssHasLiveRefs();
+            var i;
+            /* 主程序落盘的 data 对象：{ messages, settings, ..., stickerLibrary, myStickerLibrary, memeReplies } */
+            for (i = 0; i < LIB_NAMES.length; i++) {
+                var k = LIB_NAMES[i];
+                if (Array.isArray(value[k])) { S.refs[k] = value[k]; recognized = true; }
+            }
+            /* 图片专用备份对象：{ a, h, t, l, c, p, s, k, m } —— k / m 就是两个表情库 */
+            if (Array.isArray(value.k)) { S.refs.stickerLibrary = value.k; recognized = true; }
+            if (Array.isArray(value.m)) { S.refs.myStickerLibrary = value.m; recognized = true; }
+            if (!recognized) return;
+
+            S.sniffTick++;
+            /* 之前一轮没拿到活引用（跑了个寂寞）→ 现在拿到了，补跑一次 */
+            if (!hadLive && S.retryPending) {
+                S.retryPending = false;
+                setTimeout(function () { try { ssRun({ auto: true }); } catch (e) {} }, 600);
+            }
+            /* 落盘对象里出现了我们的压缩结果 → 这一批确认已落到磁盘 */
+            var pend = S.pending, anyPending = false;
+            for (var uid in pend) { if (Object.prototype.hasOwnProperty.call(pend, uid)) { anyPending = true; break; } }
+            if (!anyPending) return;
+            for (uid in pend) {
+                if (!Object.prototype.hasOwnProperty.call(pend, uid)) continue;
+                var slim = pend[uid].slim;
+                if (!slim || S.seenSlim[slim]) continue;
+                if (ssObjHasStr(value, slim)) S.seenSlim[slim] = 1;
+            }
+        } catch (e) {}
+    }
+
+    function ssObjHasStr(obj, str) {
+        var names = LIB_NAMES, i, j;
+        for (i = 0; i < names.length; i++) {
+            var arr = obj[names[i]];
+            if (Array.isArray(arr)) {
+                for (j = 0; j < arr.length; j++) if (arr[j] === str) return true;
+            }
+        }
+        if (Array.isArray(obj.k)) { for (j = 0; j < obj.k.length; j++) if (obj.k[j] === str) return true; }
+        if (Array.isArray(obj.m)) { for (j = 0; j < obj.m.length; j++) if (obj.m[j] === str) return true; }
+        return false;
+    }
+
+    function ssHookSaves() {
+        if (S.hookSave) return;
+        S.hookSave = true;
+        /* 主程序 storageSet 走 localforage.setItem → objectStore.put(data, key)，
+           put 收到的就是我们能直接改的那个 data 对象（同一份引用，不复制） */
+        try {
+            var proto = W.IDBObjectStore && W.IDBObjectStore.prototype;
+            if (proto && typeof proto.put === 'function' && !proto.put.__ssHooked) {
+                var origPut = proto.put;
+                var putWrap = function (value) {
+                    try { ssSniff(value); } catch (e) {}
+                    return origPut.apply(this, arguments);
+                };
+                putWrap.__ssHooked = 1;
+                proto.put = putWrap;
+            }
+        } catch (e) {}
+        /* localStorage 降级路径会 JSON.stringify(data)，这里同样蹭一眼（且不改返回值） */
+        try {
+            var origStr = JSON.stringify;
+            if (typeof origStr === 'function' && !origStr.__ssHooked) {
+                var strWrap = function (value) {
+                    try { ssSniff(value); } catch (e) {}
+                    return origStr.apply(this, arguments);
+                };
+                strWrap.__ssHooked = 1;
+                JSON.stringify = strWrap;
+            }
+        } catch (e) {}
+    }
+
+    /* ======================= 图片压缩核心 ======================= */
+    function ssLoadImage(src) {
+        return new Promise(function (resolve) {
+            var Img = W.Image;
+            if (!Img) { resolve(null); return; }
+            var img = null;
+            var done = false;
+            var timer = setTimeout(function () { finish(null); }, SS_READ_TIMEOUT);
+            function finish(v) {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                try { img.onload = null; img.onerror = null; } catch (e) {}
+                resolve(v);
+            }
+            try {
+                img = new Img();
+                img.onload = function () { finish(img); };
+                img.onerror = function () { finish(null); };
+                try { img.decoding = 'async'; } catch (e) {}
+                img.src = src;
+            } catch (e) { finish(null); }
+        });
+    }
+
+    function ssAlphaMime(mime) {
+        return mime === 'image/png' || mime === 'image/webp' || mime === 'image/svg+xml' ||
+            mime === 'image/bmp' || mime === 'image/avif' || mime === 'image/x-icon' || mime === 'image/tiff';
+    }
+
+    function ssCtxHasAlpha(ctx, w, h) {
+        try {
+            var data = ctx.getImageData(0, 0, w, h);
+            var px = data && data.data;
+            if (!px) return true;
+            for (var i = 3; i < px.length; i += 4) { if (px[i] < 250) return true; }
+            return false;
+        } catch (e) { return true; }   // 读不到像素就当有透明，走 WebP/PNG 更安全
+    }
+
+    /* 返回 { out, w, h } 或 null；失败绝不抛 */
+    function ssEncode(img, srcMime) {
+        var iw = (img.naturalWidth || img.width || 0) | 0;
+        var ih = (img.naturalHeight || img.height || 0) | 0;
+        if (!iw || !ih) return null;
+        var scale = Math.min(1, SS_MAX / Math.max(iw, ih));
+        var tw = Math.max(1, Math.round(iw * scale));
+        var th = Math.max(1, Math.round(ih * scale));
+        if (tw > SS_MAX) tw = SS_MAX;
+        if (th > SS_MAX) th = SS_MAX;
+
+        var cv = null, ctx = null;
+        try {
+            cv = W.document.createElement('canvas');
+            cv.width = tw;
+            cv.height = th;
+            ctx = cv.getContext && cv.getContext('2d');
+        } catch (e) { ctx = null; }
+        if (!cv || !ctx) {
+            try { if (cv) { cv.width = 0; cv.height = 0; } } catch (e2) {}
+            return null;
+        }
+
+        var out = null;
+        try {
+            try { ctx.clearRect(0, 0, tw, th); } catch (e) {}
+            try { ctx.imageSmoothingEnabled = true; } catch (e) {}
+            try { ctx.imageSmoothingQuality = 'high'; } catch (e) {}
+            ctx.drawImage(img, 0, 0, tw, th);
+
+            var alpha = ssAlphaMime(srcMime) ? ssCtxHasAlpha(ctx, tw, th) : false;
+
+            /* 1) 首选 WebP：透明能保留，体积也小 */
+            try { out = cv.toDataURL('image/webp', SS_Q); } catch (e) { out = null; }
+            if (!out || typeof out !== 'string' || out.indexOf('data:image/webp') !== 0) {
+                out = null;
+                /* 2) WebP 不可用：透明 → PNG（保透明）；不透明 → JPEG */
+                if (alpha) {
+                    try { out = cv.toDataURL('image/png'); } catch (e) { out = null; }
+                } else {
+                    try { out = cv.toDataURL('image/jpeg', SS_Q); } catch (e) { out = null; }
+                }
+            }
+            if (!out || typeof out !== 'string' || out.length < 32) out = null;
+        } catch (e) {
+            out = null;
+        }
+
+        /* 及时释放 canvas 内存（iOS 上 canvas 数量/像素有硬上限） */
+        try { cv.width = 0; cv.height = 0; } catch (e) {}
+        if (!out) return null;
+        return { out: out, w: tw, h: th, mime: ssMimeOf(out) };
+    }
+
+    /* 单张：压缩 + 三重校验（解码成功 / 尺寸正确 / 长度更小）。任何一关不过 → null（保留原图） */
+    function ssSlimOne(src) {
+        if (typeof src !== 'string' || !src) return Promise.resolve(null);
+        var srcMime = ssMimeOf(src);
+        if (!srcMime || srcMime === 'image/gif') return Promise.resolve(null);   // 动图不压
+        return ssLoadImage(src).then(function (img) {
+            if (!img) return null;                       // 原图解码失败 → 不动
+            var enc = null;
+            try { enc = ssEncode(img, srcMime); } catch (e) { enc = null; }
+            if (!enc) return null;
+            if (enc.w > SS_MAX || enc.h > SS_MAX) return null;
+            if (enc.out.length >= src.length) return null;   // 压完更大 → 放弃
+            return ssLoadImage(enc.out).then(function (img2) {
+                if (!img2) return null;                  // 压缩结果解码失败 → 放弃
+                var w2 = (img2.naturalWidth || img2.width || 0) | 0;
+                var h2 = (img2.naturalHeight || img2.height || 0) | 0;
+                if (Math.abs(w2 - enc.w) > 1 || Math.abs(h2 - enc.h) > 1) return null;  // 尺寸不对 → 放弃
+                if (w2 > SS_MAX || h2 > SS_MAX) return null;
+                return enc.out;
+            });
+        }).catch(function () { return null; });
+    }
+
+    /* ======================= 替换 / 落盘 / 回滚 ======================= */
+    function ssApply(ent, slim) {
+        try {
+            var arr = ent.arr;
+            if (!Array.isArray(arr)) return false;
+            var cur = arr[ent.idx];
+            if (ent.prop) {
+                if (!cur || typeof cur !== 'object') return false;
+                cur[ent.prop] = slim;
+                try { cur.slim = 1; } catch (e) {}     // 对象型元素额外打标记
+            } else {
+                if (typeof cur !== 'string') return false;
+                if (cur !== ent.src) return false;     // 期间被别处改过 → 放弃这张
+                arr[ent.idx] = slim;                   // 原位替换：数组还是同一个对象
+            }
+            var uid = ent.lib + '#' + ent.idx + '#' + ssKey(ent.src);
+            S.pending[uid] = { arr: arr, idx: ent.idx, prop: ent.prop, orig: ent.src, slim: slim, lib: ent.lib };
+            S.roundGain += Math.max(0, ent.src.length - slim.length);
+            ssDoneAdd(ent.lib + '|' + ssKey(slim));
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function ssDropPending(uid) {
+        try { delete S.pending[uid]; } catch (e) {}
+    }
+
+    /* 立刻落盘并等确认：saveData() 走主程序防抖，flushSave() 才是「马上写」 */
+    function ssSaveNow() {
+        if (S.saving) return S.saving;
+        S.saving = (function () {
+            var tick0 = S.sniffTick;
+            return Promise.resolve().then(function () {
+                try { if (typeof W.saveData === 'function') W.saveData(); } catch (e) {}
+                var p = null;
+                try { if (typeof W.flushSave === 'function') p = W.flushSave(); } catch (e) { p = null; }
+                if (p && typeof p.then === 'function') return ssWithTimeout(p, 6000);
+                return ssDelay(150);
+            }).then(function () {
+                return ssDelay(40);
+            }).then(function () {
+                var saw = S.sniffTick > tick0;
+                S.saving = null;
+                return saw;
+            });
+        })();
+        return S.saving;
+    }
+
+    /* 把「落盘对象里确实出现过」的 pending 清掉；没确认的继续留着（原图仍在内存里） */
+    function ssReapPending() {
+        var cleared = 0;
+        for (var uid in S.pending) {
+            if (!Object.prototype.hasOwnProperty.call(S.pending, uid)) continue;
+            var slim = S.pending[uid].slim;
+            if (slim && S.seenSlim[slim]) { ssDropPending(uid); cleared++; }
+        }
+        return cleared;
+    }
+
+    function ssCommit(applied) {
+        return ssSaveNow().then(function (ok) {
+            if (!ok) return ssDelay(400).then(ssSaveNow);
+            return ok;
+        }).then(function (ok) {
+            if (!ok) return false;                          // 没确认落盘：pending 保留，下次落盘自然确认
+            ssReapPending();
+            var m = ssMarker(true);
+            if (m) {
+                var g = Math.max(0, Math.round(S.roundGain));
+                m.gain = (m.gain || 0) + g;
+                m.at = Date.now();
+                S.roundCommitted += g;
+                S.roundGain = 0;
+            }
+            return true;
+        }).catch(function () { return false; });
+    }
+
+    function ssRollback(applied, opts) {
+        opts = opts || {};
+        var restored = 0;
+        for (var i = 0; i < applied.length; i++) {
+            var a = applied[i], ent = a.ent;
+            try {
+                if (ent.prop) {
+                    var obj = ent.arr[ent.idx];
+                    if (obj && typeof obj === 'object') {
+                        obj[ent.prop] = a.orig;
+                        try { delete obj.slim; } catch (e) {}
+                    }
+                } else {
+                    ent.arr[ent.idx] = a.orig;
+                }
+                restored++;
+            } catch (e) {}
+            ssDoneRemove(ent.lib + '|' + ssKey(a.slim));
+            for (var uid in S.pending) {
+                if (!Object.prototype.hasOwnProperty.call(S.pending, uid)) continue;
+                if (S.pending[uid].slim === a.slim) ssDropPending(uid);
+            }
+        }
+        /* 已并入 marker 的收益也退回去 */
+        if (S.roundCommitted > 0) {
+            var m = ssMarker(false);
+            if (m) m.gain = Math.max(0, (m.gain || 0) - S.roundCommitted);
+            S.roundCommitted = 0;
+        }
+        S.roundGain = 0;
+        if (opts.markAbort) {
+            var mm = ssMarker(true);
+            if (mm) { mm.abortedAt = Date.now(); mm.skipUntil = Date.now() + 12 * 3600 * 1000; }
+        }
+        return restored;
+    }
+
+    /* ======================= 可见性：后台暂停，回前台续做 ======================= */
+    function ssWaitVisible() {
+        if (!ssHidden()) return Promise.resolve(true);
+        return new Promise(function (resolve) {
+            var settled = false;
+            var recheck = null;
+            function fin() {
+                if (settled) return;
+                settled = true;
+                try { W.document.removeEventListener('visibilitychange', onVis); } catch (e) {}
+                if (recheck) clearTimeout(recheck);
+                resolve(true);
+            }
+            function onVis() { if (!ssHidden()) fin(); }
+            try { W.document.addEventListener('visibilitychange', onVis); } catch (e) {}
+            /* 只做一次极轻量的复查（不做任何 canvas 操作、不用 setInterval），防止事件丢失后永久卡死 */
+            recheck = setTimeout(function () {
+                recheck = null;
+                if (!settled && !ssHidden()) fin();
+                else if (!settled) { try { W.document.addEventListener('visibilitychange', onVis); } catch (e) {} }
+            }, 3000);
+        });
+    }
+
+    /* ======================= 进度提示 ======================= */
+    function ssPill(show, text) {
+        try {
+            var el = S.pillEl;
+            if (!el) {
+                el = W.document.getElementById && W.document.getElementById('ssSlimPill');
+                if (!el) {
+                    var body = W.document.body;
+                    if (!body) return;
+                    el = W.document.createElement('div');
+                    el.className = 'ss-slim-pill';
+                    el.id = 'ssSlimPill';
+                    var dot = W.document.createElement('span');
+                    dot.className = 'ss-slim-dot';
+                    var txt = W.document.createElement('span');
+                    txt.className = 'ss-slim-text';
+                    txt.id = 'ssSlimText';
+                    el.appendChild(dot);
+                    el.appendChild(txt);
+                    body.appendChild(el);
+                }
+                S.pillEl = el;
+            }
+            if (text) {
+                var t = el.querySelector ? el.querySelector('.ss-slim-text') : null;
+                if (t) t.textContent = text;
+            }
+            if (show) el.classList.add('ss-slim-on');
+            else el.classList.remove('ss-slim-on');
+        } catch (e) {}
+    }
+
+    function ssPillHideLater(ms) {
+        if (S.pillTimer) clearTimeout(S.pillTimer);
+        S.pillTimer = setTimeout(function () {
+            S.pillTimer = null;
+            ssPill(false);
+        }, ms || SS_PILL_HIDE);
+    }
+
+    /* ======================= 主流程 ======================= */
+    function ssUid(ent) { return ent.lib + '#' + ent.idx + '#' + ssKey(ent.src); }
+
+    /* 分批处理：每批 4 张 + 批间 400ms + 后台暂停 + 每批落盘确认 */
+    async function ssProcess(todo) {
+        var appliedAll = [];
+        var idx = 0;
+        while (idx < todo.length) {
+            await ssWaitVisible();
+            if (ssHidden()) continue;
+
+            var batch = todo.slice(idx, idx + SS_BATCH);
+            var applied = [];
+            var consumed = 0;
+            for (var i = 0; i < batch.length; i++) {
+                var ent = batch[i];
+                if (ssHidden()) break;                 // 中途切到后台：本批立刻打住
+                consumed++;
+                var slim = null;
+                try { slim = await ssSlimOne(ent.src); } catch (e) { slim = null; }
+                if (slim && ssApply(ent, slim)) {
+                    applied.push({ ent: ent, orig: ent.src, slim: slim, uid: ssUid(ent) });
+                }
+                /* 校验没过 / 压完更大 / 解码失败：原图一个字节都不动，也不写 done（下一轮还会再试一次） */
+                ssPill(true, '正在压缩表情 ' + Math.min(idx + i + 1, todo.length) + '/' + todo.length);
+            }
+            idx += consumed;
+
+            if (applied.length) {
+                for (var k = 0; k < applied.length; k++) appliedAll.push(applied[k]);
+                await ssCommit(applied);               // 替换后立刻落盘，确认后才清 pending
+            }
+
+            if (idx < todo.length) {
+                if (ssHidden()) { await ssWaitVisible(); }
+                await ssDelay(SS_GAP);                 // 批间 400ms，不用 setInterval
+            }
+        }
+        return appliedAll;
+    }
+
+    function ssHasLiveRefs() {
+        return !!(S.refs.memeReplies || S.refs.stickerLibrary || S.refs.myStickerLibrary);
+    }
+
+    function ssNudgeSave() {
+        /* 触发一次主程序落盘，好让 ssSniff 蹭到活数组引用（只在解析不到表情库时做） */
+        if (S.nudging) return S.nudging;
+        if (S.nudgedAt && Date.now() - S.nudgedAt < 20000) return Promise.resolve();   // 20 秒内不重复催
+        S.nudgedAt = Date.now();
+        S.nudging = Promise.resolve().then(function () {
+            try { if (typeof W.saveData === 'function') W.saveData(); } catch (e) {}
+            var p = null;
+            try { if (typeof W.flushSave === 'function') p = W.flushSave(); } catch (e) { p = null; }
+            if (p && typeof p.then === 'function') return ssWithTimeout(p, 8000);
+            return ssDelay(250);
+        }).then(function () { return ssDelay(60); }).catch(function () {}).then(function () {
+            S.nudging = null;
+        });
+        return S.nudging;
+    }
+
+    function ssEmptyReport(reason) {
+        return {
+            ok: false,
+            reason: reason || '',
+            total: 0,
+            done: 0,
+            remaining: 0,
+            compressed: 0,
+            skipped: 0,
+            failed: 0,
+            aborted: false,
+            bytesBefore: 0,
+            bytesAfter: 0
+        };
+    }
+
+    async function ssRunInner(opts) {
+        opts = opts || {};
+        var rep = ssEmptyReport('idle');
+        /* 独立注入时拿不到闭包变量，必须先等主程序落一次盘，才谈得上改到「活」数组 */
+        if (!ssHasLiveRefs()) await ssNudgeSave();
+        var entries = ssGather();
+
+        if (!entries.length) {
+            await ssNudgeSave();
+            entries = ssGather();
+        }
+        if (!entries.length) { rep.reason = 'libs-unavailable'; return rep; }
+
+        var all = entries.length;
+        var settled = 0;
+        var todo = [];
+        var i;
+        for (i = 0; i < entries.length; i++) {
+            var ent = entries[i];
+            if (ent.kind === 'gif' || ent.kind === 'remote') {
+                ssDoneAdd(ent.key);                    // 动图/外链：永久免压，标记一下省得每次再判
+                settled++;
+                rep.skipped++;
+                continue;
+            }
+            if (ssIsSettled(ent)) { settled++; continue; }
+            todo.push(ent);
+        }
+
+        rep.total = all;
+        rep.done = settled;
+        rep.remaining = todo.length;
+
+        if (!todo.length) {
+            rep.ok = true;
+            rep.reason = 'nothing-to-do';
+            return rep;
+        }
+
+        ssPill(true, '正在压缩表情 0/' + todo.length);
+        var applied = [];
+        try {
+            applied = await ssProcess(todo);
+        } catch (e) {
+            applied = applied || [];
+        }
+
+        var before = 0, after = 0;
+        for (i = 0; i < applied.length; i++) {
+            before += applied[i].orig.length;
+            after += applied[i].slim.length;
+        }
+        rep.compressed = applied.length;
+        rep.failed = Math.max(0, todo.length - applied.length);
+        rep.bytesBefore = before;
+        rep.bytesAfter = after;
+
+        /* 规则 7：整轮收益 < 5% → 判定「这批表情本来就小」，整轮放弃并恢复原图 */
+        if (applied.length > 0 && before > 0 && (before - after) / before < SS_MIN_GAIN) {
+            rep.aborted = true;
+            rep.reason = 'gain-too-small';
+            rep.ok = false;
+            ssRollback(applied, { markAbort: true });
+            await ssSaveNow();                        // 回滚也要落盘
+            rep.bytesAfter = rep.bytesBefore;
+            ssPill(true, '这批表情本来就很小，已保留原图');
+            ssPillHideLater(2400);
+            return rep;
+        }
+
+        rep.ok = true;
+        rep.reason = applied.length ? 'done' : 'nothing-compressible';
+        var m = ssMarker(true);
+        if (m && m.skipUntil) { m.skipUntil = 0; }
+        ssPill(true, applied.length ? ('表情已压缩 ' + applied.length + ' 张') : '表情无需压缩');
+        ssPillHideLater();
+        return rep;
+    }
+
+    function ssRun(opts) {
+        if (S.running) return S.running;
+        S.running = Promise.resolve()
+            .then(function () { return ssRunInner(opts || {}); })
+            .catch(function (err) {
+                var rep = ssEmptyReport('error');
+                rep.error = String(err && err.message ? err.message : err);
+                return rep;
+            })
+            .then(function (rep) {
+                S.running = null;
+                S.lastReport = rep;
+                return rep;
+            });
+        return S.running;
+    }
+
+    /* ======================= 统计 ======================= */
+    function ssStats() {
+        var libs = ssLibs();
+        var seen = [];
+        var m = ssMarker(false);
+        var doneArr = (m && Array.isArray(m.done)) ? m.done : [];
+        var total = 0, done = 0, bytesAfter = 0;
+        var i, j;
+        for (i = 0; i < libs.length; i++) {
+            var name = libs[i].name, arr = libs[i].arr;
+            if (seen.indexOf(arr) >= 0) continue;
+            seen.push(arr);
+            var len = 0;
+            try { len = arr.length | 0; } catch (e) { len = 0; }
+            for (j = 0; j < len; j++) {
+                var info = ssSrcInfo(arr[j]);
+                if (!info.src) continue;
+                var kind = ssKindOf(info.src);
+                if (!kind) continue;
+                total++;
+                bytesAfter += info.src.length;
+                var settledItem = false;
+                if (arr[j] && typeof arr[j] === 'object' && arr[j].slim === 1) settledItem = true;
+                if (!settledItem && doneArr.indexOf(name + '|' + ssKey(info.src)) >= 0) settledItem = true;
+                if (settledItem) done++;
+            }
+        }
+        var gain = (m && typeof m.gain === 'number' && isFinite(m.gain)) ? m.gain : 0;
+        gain += S.roundGain;
+        return {
+            total: total,
+            done: done,
+            remaining: Math.max(0, total - done),
+            bytesBefore: bytesAfter + Math.max(0, Math.round(gain)),
+            bytesAfter: bytesAfter
+        };
+    }
+
+    /* ======================= 回滚未确认批次 ======================= */
+    function ssRestore() {
+        var n = 0;
+        for (var uid in S.pending) {
+            if (!Object.prototype.hasOwnProperty.call(S.pending, uid)) continue;
+            var p = S.pending[uid];
+            try {
+                if (p.prop) {
+                    var obj = p.arr[p.idx];
+                    if (obj && typeof obj === 'object') {
+                        obj[p.prop] = p.orig;
+                        try { delete obj.slim; } catch (e) {}
+                    }
+                } else if (typeof p.arr[p.idx] === 'string') {
+                    p.arr[p.idx] = p.orig;
+                }
+                ssDoneRemove(p.lib + '|' + ssKey(p.slim));
+                S.roundGain = Math.max(0, S.roundGain - Math.max(0, p.orig.length - p.slim.length));
+                n++;
+            } catch (e) {}
+            ssDropPending(uid);
+        }
+        S.seenSlim = {};
+        try { if (typeof W.saveData === 'function') W.saveData(); } catch (e) {}
+        return n;
+    }
+
+    /* ======================= 上传拦截（新表情也要压） ======================= */
+    /* 主程序的两个上传处理函数都是闭包里匿名注册的 addEventListener，
+       外部拿不到函数引用。所以要包装它们唯一共同调用的 FileReader.readAsDataURL：
+       读完后先把 result 换成压缩版，再交回原来的 onload，主程序函数体一个字都不用改。 */
+    function ssStickerUploadActive() {
+        return (Date.now() - S.uploadAt) < SS_UPLOAD_WINDOW;
+    }
+
+    function ssCallOnload(reader, fn, ev, slim) {
+        if (slim) {
+            var overridden = false;
+            try {
+                Object.defineProperty(reader, 'result', {
+                    value: slim,
+                    configurable: true,
+                    enumerable: true,
+                    writable: true
+                });
+                overridden = true;
+            } catch (e) { overridden = false; }
+            if (overridden) {
+                /* 新上传的表情已经 ≤120px，直接标记已处理（三个库都记，避免下一轮再白跑一遍） */
+                for (var i = 0; i < LIB_NAMES.length; i++) ssDoneAdd(LIB_NAMES[i] + '|' + ssKey(slim));
+                try { if (typeof W.saveData === 'function') W.saveData(); } catch (e) {}
+            }
+        }
+        try { fn.call(reader, ev); } catch (e) {
+            try { if (W.console && W.console.error) W.console.error('[ss] 上传回调异常', e); } catch (e2) {}
+        }
+    }
+
+    function ssHookReader() {
+        if (S.hookReader) return;
+        var FR = W.FileReader;
+        if (!FR || !FR.prototype) return;
+        var proto = FR.prototype;
+        var orig = proto.readAsDataURL;
+        if (typeof orig !== 'function' || orig.__ssHooked) { S.hookReader = true; return; }
+        var wrap = function (file) {
+            var self = this;
+            try {
+                if (!ssStickerUploadActive() || !file || typeof file.type !== 'string' ||
+                    file.type.indexOf('image/') !== 0 || /gif/i.test(file.type)) {
+                    return orig.apply(self, arguments);
+                }
+                var userOnload = self.onload;
+                if (typeof userOnload === 'function' && !self.__ssReaderWrapped) {
+                    self.__ssReaderWrapped = 1;
+                    self.onload = function (ev) {
+                        var raw = '';
+                        try { raw = String(self.result || (ev && ev.target && ev.target.result) || ''); } catch (e) { raw = ''; }
+                        if (!raw || raw.indexOf('data:image/') !== 0) {
+                            try { return userOnload.call(self, ev); } catch (e) {}
+                            return;
+                        }
+                        var finished = false;
+                        var timer = setTimeout(function () {
+                            if (finished) return;
+                            finished = true;
+                            ssCallOnload(self, userOnload, ev, null);   // 超时保底：交回原图，绝不卡住上传
+                        }, 2500);
+                        ssSlimOne(raw).then(function (slim) {
+                            if (finished) return;
+                            finished = true;
+                            clearTimeout(timer);
+                            ssCallOnload(self, userOnload, ev, slim);
+                        }).catch(function () {
+                            if (finished) return;
+                            finished = true;
+                            clearTimeout(timer);
+                            ssCallOnload(self, userOnload, ev, null);
+                        });
+                    };
+                }
+                return orig.apply(self, arguments);
+            } catch (e) {
+                try { return orig.apply(self, arguments); } catch (e2) { throw e2; }
+            }
+        };
+        wrap.__ssHooked = 1;
+        try { proto.readAsDataURL = wrap; } catch (e) {}
+        S.hookReader = true;
+    }
+
+    function ssBindChangeCapture() {
+        if (S.hookChange) return;
+        S.hookChange = true;
+        try {
+            /* 捕获阶段挂在 document 上：会先于 input 自身的 change 处理器触发，
+               于是主程序读文件之前我们就能知道「这次是表情上传」 */
+            W.document.addEventListener('change', function (e) {
+                try {
+                    var t = e && e.target;
+                    if (!t || t.tagName !== 'INPUT') return;
+                    var ty = t.type;
+                    if (ty && String(ty).toLowerCase() !== 'file') return;   // 只关心文件选择框
+                    var id = t.id || '';
+                    var isSticker = !!STICKER_INPUT_IDS[id] ||
+                        (/sticker|meme/i.test(id) && !/avatar|cover|bg|moment|chat|image/i.test(id));
+                    if (!isSticker) { S.uploadAt = 0; return; }   // 别的入口一上传就立刻撤销标记，绝不误伤
+                    var stamp = Date.now();
+                    S.uploadAt = stamp;
+                    /* 主程序在同一个 task 里就会同步 readAsDataURL，处理完就撤标记，
+                       不留下几秒的窗口去误伤随后上传的头像 / 聊天图 */
+                    setTimeout(function () { if (S.uploadAt === stamp) S.uploadAt = 0; }, 1000);
+                } catch (e2) {}
+            }, true);
+        } catch (e) {}
+    }
+
+    /* ======================= 初始化 / 自举 ======================= */
+    function ssInit() {
+        if (S.booted) return W.ssDebug;         // 幂等：重复调用只保留一层包装
+        S.booted = true;
+        ssHookSaves();
+        ssHookReader();
+        ssBindChangeCapture();
+        return W.ssDebug;
+    }
+
+    function ssScheduleBoot() {
+        if (S.bootTimer) return;                // 只有一个自举定时器
+        S.bootTimer = setTimeout(function () {
+            S.bootTimer = null;
+            try { ssInit(); } catch (e) {}
+            try {
+                var m = ssMarker(false);
+                if (m && m.skipUntil && Date.now() < m.skipUntil) return;   // 上轮已判定「本来就小」，不重复折腾
+                ssRun({ auto: true }).then(function (rep) {
+                    /* 这一轮如果连「活数组」都没拿到（主程序还没落盘），等第一次落盘后再补跑一次 */
+                    if (rep && !ssHasLiveRefs()) S.retryPending = true;
+                }).catch(function () {});
+            } catch (e) {}
+        }, SS_BOOT_DELAY);
+    }
+
+    /* ======================= 对外接口 ======================= */
+    W.ssDebug = {
+        run: function (opts) { return ssRun(opts || {}); },
+        stats: function () { return ssStats(); },
+        restore: function () { return ssRestore(); }
+    };
+    W.initStickerSlimFeature = function () { return ssInit(); };
+
+    /* 立刻钩上（成本极低，只为蹭到主程序的落盘对象）；压缩本身延迟 8 秒才开始 */
+    try { ssHookSaves(); } catch (e) {}
+    try { ssHookReader(); } catch (e) {}
+    try { ssBindChangeCapture(); } catch (e) {}
+
+    try {
+        if (W.document.readyState === 'loading') {
+            W.document.addEventListener('DOMContentLoaded', ssScheduleBoot);
+        } else {
+            ssScheduleBoot();
+        }
+    } catch (e) { ssScheduleBoot(); }
+})();
+
+})();
 /* ===== 功能模块：islbadge（诊断标签已移除，__islandDebug() 仍可用） ===== */
 /* ===== 功能模块：island ===== */
 /* ===== 灵动岛 / 后台保活：iOS 必须在用户手势内启动音频 ===== */
