@@ -7380,6 +7380,9 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         html body #keepAliveBadge.show,
         html body #keepAliveBadge.active { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
 
+        /* ===== 关闭观影房：磁贴隐藏 ===== */
+        [data-feature="watch"] { display: none !important; }
+
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -14260,6 +14263,40 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：killwatch ===== */
+/* ===== 按用户要求：关闭观影房（隐藏入口 + 打开动作失效 + 不初始化） ===== */
+(function () {
+    function off() {
+        try {
+            window.watchOpenModal = function () {
+                try { if (typeof window.showNotification === 'function') window.showNotification('观影房已关闭', 'info', 1800); } catch (e) {}
+            };
+        } catch (e) {}
+        try { window.initWatchFeature = function () { return false; }; } catch (e) {}
+        try {
+            var tiles = document.querySelectorAll('[data-feature="watch"]');
+            for (var i = 0; i < tiles.length; i++) {
+                try { tiles[i].style.setProperty('display', 'none', 'important'); } catch (e) {}
+                try { tiles[i].setAttribute('data-feature-off', '1'); } catch (e) {}
+            }
+        } catch (e) {}
+        // 停掉观影房里可能还在播的媒体，释放解码器
+        try {
+            var root = document.getElementById('watch3Root') || document.getElementById('watchModal');
+            if (root) {
+                var ms = root.querySelectorAll('video, audio');
+                for (var j = 0; j < ms.length; j++) {
+                    try { ms[j].pause(); ms[j].removeAttribute('src'); ms[j].load(); } catch (e) {}
+                }
+            }
+        } catch (e) {}
+    }
+    off();
+    [200, 800, 2000, 4000, 8000, 15000].forEach(function (x) { setTimeout(off, x); });
+    try { document.addEventListener('click', function () { setTimeout(off, 60); }, true); } catch (e) {}
+    setInterval(off, 4000);
+    window.__killWatch = off;
+})();
 /* ===== 功能模块：stickerslim2 ===== */
 /* ===== 表情包上传时压缩（120px，不改结构、不碰全局接口） ===== */
 (function () {
