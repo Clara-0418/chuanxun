@@ -14263,6 +14263,97 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             window.initHabitFeature = initHabitFeature;
 
             /* @@FEATURE_JS@@ */
+/* ===== 功能模块：lazyimg ===== */
+/* ===== 聊天图片按需渲染：只解码看得见的图片，滚出屏幕就释放（数据完全不动） ===== */
+(function () {
+    var PH = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    var io = null;
+
+    function container() { return document.getElementById('chatContainer'); }
+
+    function realOf(img) { return img.dataset.realSrc || img.getAttribute('data-src') || ''; }
+
+    function ensure() {
+        if (io || typeof IntersectionObserver === 'undefined') return;
+        io = new IntersectionObserver(function (list) {
+            for (var i = 0; i < list.length; i++) {
+                var en = list[i], img = en.target;
+                try {
+                    if (en.isIntersecting) {
+                        var r = realOf(img);
+                        if (r && img.src !== r) img.src = r;
+                    } else {
+                        var cur = img.getAttribute('src') || '';
+                        if (cur && cur !== PH && cur.length > 200) {
+                            img.dataset.realSrc = cur;
+                            try { img.setAttribute('data-src', cur); } catch (e) {}
+                            img.src = PH;
+                        }
+                    }
+                } catch (e) {}
+            }
+        }, { root: container() || null, rootMargin: '700px 0px' });
+    }
+
+    function attach() {
+        ensure();
+        var c = container();
+        if (!c) return;
+        var imgs = c.querySelectorAll('img');
+        for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            if (img.dataset.lazyBound === '1') continue;
+            img.dataset.lazyBound = '1';
+            try { if (io) io.observe(img); } catch (e) {}
+            try { img.addEventListener('load', function () { try { this.dataset.natH = this.naturalHeight || 0; } catch (e) {} }); } catch (e) {}
+        }
+    }
+
+    function restoreAll() {
+        var c = container();
+        if (!c) return;
+        var imgs = c.querySelectorAll('img');
+        for (var i = 0; i < imgs.length; i++) {
+            var r = realOf(imgs[i]);
+            if (r && imgs[i].src !== r) { try { imgs[i].src = r; } catch (e) {} }
+        }
+    }
+
+    function releaseAll() {
+        var c = container();
+        if (!c) return;
+        var imgs = c.querySelectorAll('img');
+        for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i], cur = img.getAttribute('src') || '';
+            if (cur && cur !== PH && cur.length > 200) {
+                try { img.dataset.realSrc = cur; img.setAttribute('data-src', cur); img.src = PH; } catch (e) {}
+            }
+        }
+    }
+
+    // 点/摸图片时先把真实图恢复回来，保证「双击看大图」正常
+    try {
+        document.addEventListener('pointerdown', function (e) {
+            var t = e.target;
+            if (t && t.tagName === 'IMG') { var r = realOf(t); if (r && t.src !== r) { try { t.src = r; } catch (x) {} } }
+        }, true);
+        document.addEventListener('touchstart', function (e) {
+            var t = e.target;
+            if (t && t.tagName === 'IMG') { var r = realOf(t); if (r && t.src !== r) { try { t.src = r; } catch (x) {} } }
+        }, true);
+    } catch (e) {}
+
+    // 切后台释放全部已解码图片，回前台恢复可见的
+    try {
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) { releaseAll(); } else { setTimeout(restoreAll, 200); }
+        });
+    } catch (e) {}
+
+    try { setTimeout(attach, 1200); setInterval(attach, 4000); } catch (e) {}
+    window.__lazyImg = { attach: attach, restoreAll: restoreAll, releaseAll: releaseAll };
+})();
+
 /* ===== 功能模块：killwatch ===== */
 /* ===== 按用户要求：关闭观影房（隐藏入口 + 打开动作失效 + 不初始化） ===== */
 (function () {
