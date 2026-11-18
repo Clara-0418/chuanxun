@@ -101,5 +101,34 @@
     window.__keepAliveDebug=function(){ var el=ensure(); return { ok:ok, paused: el?el.paused:null, ready: el?el.readyState:null, meta: !!(navigator.mediaSession&&navigator.mediaSession.metadata), state: navigator.mediaSession?navigator.mediaSession.playbackState:null }; };
   }catch(e){}
 })();
-</script></body>
+</script><style>
+#chatContainer{padding-bottom:100px !important;scroll-padding-bottom:100px !important}
+textarea{resize:none !important}
+html,body,button,input,textarea,select,div,span,p,h1,h2,h3,h4,h5,h6,li,a,label,em,strong{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Heiti SC","Microsoft YaHei",sans-serif !important}
+</style>
+<script>
+(function(){
+  try{
+    if(!document.querySelector('link[rel="apple-touch-icon"]')){
+      var l=document.createElement('link'); l.rel='apple-touch-icon'; l.href='icon-512.png'; document.head.appendChild(l);
+    }
+    window.__setIslandIcon=function(){
+      try{
+        if(!navigator.mediaSession||!window.MediaMetadata) return;
+        var s=window.settings||{};
+        navigator.mediaSession.metadata=new MediaMetadata({
+          title:'\u4f20\u8baf',
+          artist:(s.partnerName||'\u68a6\u89d2'),
+          album:'\u966a\u4f34\u4e2d',
+          artwork:[{src:'icon-512.png',sizes:'512x512',type:'image/png'}]
+        });
+        navigator.mediaSession.playbackState='playing';
+      }catch(e){}
+    };
+    setTimeout(window.__setIslandIcon,1500);
+    setInterval(function(){ if(!document.hidden) window.__setIslandIcon(); },60000);
+  }catch(e){}
+})();
+</script>
+</body>
 </html>
