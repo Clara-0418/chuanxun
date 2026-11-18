@@ -27746,7 +27746,18 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
                 var img = document.createElement('img');
                 img.src = src;
                 img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-                img.onclick = function () { if (send(src)) closePanel(); };
+                var lastTap = 0;
+                img.onclick = function () {
+                    var now = Date.now();
+                    if (now - lastTap < 350) { if (send(src)) closePanel(); return; }
+                    lastTap = now;
+                    cell.style.outline = '3px solid #d99ba8';
+                    title.textContent = '再点一次发送';
+                    setTimeout(function () {
+                        cell.style.outline = '';
+                        title.textContent = '梦角的表情包（' + list.length + '）';
+                    }, 1000);
+                };
                 cell.appendChild(img);
                 grid.appendChild(cell);
             });
