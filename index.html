@@ -1,6 +1,72 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light" data-color-theme="black-white">
 <head>
+<script>
+(function () {
+    function list() {
+        try { if (Array.isArray(window.memeReplies)) return window.memeReplies; } catch (e) {}
+        return [];
+    }
+    function close() { var p = document.getElementById('mjMemePanel'); if (p) p.remove(); }
+    function send(src) {
+        try {
+            var name = (window.settings && window.settings.myName) || '我';
+            if (typeof window.addMessage === 'function') { window.addMessage({ sender: name, text: '', image: src }); return true; }
+        } catch (e) {}
+        return false;
+    }
+    window.__openMjMeme = function () {
+        close();
+        var arr = list().filter(function (x) { return typeof x === 'string' && x.indexOf('data:') === 0; });
+        var wrap = document.createElement('div');
+        wrap.id = 'mjMemePanel';
+        wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483000;display:flex;align-items:flex-end;';
+        var box = document.createElement('div');
+        box.style.cssText = 'width:100%;max-height:70%;overflow:auto;background:#fff;border-radius:16px 16px 0 0;padding:12px 12px 24px;box-sizing:border-box;';
+        var head = document.createElement('div');
+        head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:14px;font-weight:600;color:#333;';
+        var title = document.createElement('span');
+        title.textContent = '梦角的表情包（' + arr.length + '）';
+        var cb = document.createElement('span');
+        cb.textContent = '关闭';
+        cb.style.cssText = 'font-size:13px;color:#888;padding:4px 10px;';
+        cb.onclick = close;
+        head.appendChild(title); head.appendChild(cb);
+        box.appendChild(head);
+        if (!arr.length) {
+            var e = document.createElement('div');
+            e.textContent = '表情库是空的';
+            e.style.cssText = 'padding:24px;text-align:center;color:#999;font-size:13px;';
+            box.appendChild(e);
+        } else {
+            var g = document.createElement('div');
+            g.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
+            arr.forEach(function (src) {
+                var cell = document.createElement('div');
+                cell.style.cssText = 'aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#f5f5f5;display:flex;align-items:center;justify-content:center;';
+                var img = document.createElement('img');
+                img.src = src;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                var last = 0;
+                img.onclick = function () {
+                    var now = Date.now();
+                    if (now - last < 350) { if (send(src)) close(); return; }
+                    last = now;
+                    cell.style.outline = '3px solid #d99ba8';
+                    title.textContent = '再点一次发送';
+                    setTimeout(function () { cell.style.outline = ''; title.textContent = '梦角的表情包（' + arr.length + '）'; }, 1000);
+                };
+                cell.appendChild(img);
+                g.appendChild(cell);
+            });
+            box.appendChild(g);
+        }
+        wrap.appendChild(box);
+        wrap.onclick = function (ev) { if (ev.target === wrap) close(); };
+        document.body.appendChild(wrap);
+    };
+})();
+</script>
 <script>try{window.__nRADU=FileReader.prototype.readAsDataURL;}catch(e){}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -6692,7 +6758,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         <div class="sticker-picker-popover" id="stickerPicker">
                             <div class="combo-tabs-header">
                                 <button class="combo-tab-btn active" data-tab="my-sticker"><i class="fas fa-user"></i> 我</button>
-                                <button id="mjMemeTab" onclick="try{if(window.__openMjMeme){window.__openMjMeme();}else{alert(String.fromCharCode(0x8868)+String.fromCharCode(0x60C5)+&quot;模块未加载&quot;);}}catch(e){};return false;" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:none;border-radius:999px;background:#fce7ec;color:#c0788a;font-size:14px;font-weight:600;margin:0 4px;"><i class="fas fa-image"></i> 表情包</button>
+                                <button class="combo-tab-btn" id="mjMemeTab" onclick="try{if(window.__openMjMeme){window.__openMjMeme();}else{alert('loading');}}catch(e){};return false;"><i class="fas fa-image"></i> 表情包</button>
                                 <button class="combo-tab-btn" data-tab="checkin"><i class="fas fa-search"></i> 查岗</button>
                                 <div style="margin-left:auto;"><button id="stickerAddBtn" onclick="document.getElementById('stickerUpload').click()" ontouchend="event.preventDefault();document.getElementById('stickerUpload').click();" style="background:var(--accent-color);border:none;border-radius:6px;color:#fff;padding:2px 8px;font-size:11px;cursor:pointer;">+</button><input type="file" id="stickerUpload" accept="image/*" multiple style="display:none;"></div>
                             </div>
