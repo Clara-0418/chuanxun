@@ -27782,25 +27782,35 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
     }
     try { document.addEventListener('click', catchTab, true); } catch (e) {}
     // ★ 终极方案：删掉「拍一拍」标签，插入自己的「表情包」标签
+    function pickByText(txt) {
+        var nodes = document.querySelectorAll('button, .combo-tab-btn, [role="tab"]');
+        for (var i = 0; i < nodes.length; i++) {
+            var s = (nodes[i].textContent || '').replace(/\s/g, '');
+            if (s === txt) return nodes[i];
+        }
+        return null;
+    }
     function stripAndInsert() {
         try {
-            var pokes = document.querySelectorAll('.combo-tab-btn[data-tab="poke"]');
-            for (var i = 0; i < pokes.length; i++) { try { pokes[i].remove(); } catch (e) { pokes[i].style.display = 'none'; } }
+            var poke = pickByText('拍一拍');
+            if (poke && poke.parentNode) {
+                try { poke.remove(); } catch (e) { poke.style.display = 'none'; }
+            }
             if (document.getElementById('mjMemeTabBtn')) return;
-            var checkin = document.querySelector('.combo-tab-btn[data-tab="checkin"]');
+            var checkin = pickByText('查岗');
             if (!checkin || !checkin.parentNode) return;
             var b = document.createElement('button');
             b.id = 'mjMemeTabBtn';
-            b.className = 'combo-tab-btn';
+            if (checkin.className) b.className = checkin.className;
+            else b.className = 'combo-tab-btn';
             b.innerHTML = '<i class="fas fa-image"></i> 表情包';
-            b.addEventListener('click', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); }, true);
-            try { b.addEventListener('touchstart', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); }, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchstart', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (y) {} openPanel(); }, true); }
+            var go = function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); };
+            b.addEventListener('click', go, true);
+            try { b.addEventListener('touchstart', go, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchstart', go, true); }
+            try { b.addEventListener('touchend', go, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchend', go, true); }
             checkin.parentNode.insertBefore(b, checkin);
         } catch (e) {}
-    }
-    try { setInterval(stripAndInsert, 300); } catch (e) {}
-    try { var mo2 = new MutationObserver(function () { stripAndInsert(); }); mo2.observe(document.body, { childList: true, subtree: true }); } catch (e) {}
-    stripAndInsert();window.__openMjMeme = openPanel;
+    }    stripAndInsert();window.__openMjMeme = openPanel;
 })();
 </script></script>
 </body>
