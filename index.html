@@ -27826,5 +27826,41 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
     ensureFab();    stripAndInsert();window.__openMjMeme = openPanel;
 })();
 </script></script>
+<script>
+(function () {
+    window.__mjSyncStickers = function () {
+        try {
+            if (!window.localforage || !window.localforage.setItem) return 0;
+            if (window.localforage.__mjWrapped) return 0;
+            var orig = window.localforage.setItem.bind(window.localforage);
+            window.localforage.__mjWrapped = true;
+            var totalAdded = 0;
+            window.localforage.setItem = function (k, v) {
+                try {
+                    if (k === 'CHAT_APP_V13_appData' && v && typeof v === 'object') {
+                        var mj = Array.isArray(window.memeReplies) ? window.memeReplies : [];
+                        var mine = Array.isArray(v.myStickerLibrary) ? v.myStickerLibrary.slice() : [];
+                        var have = {};
+                        mine.forEach(function (x) { if (typeof x === 'string') have[x] = 1; });
+                        var added = 0;
+                        mj.forEach(function (x) {
+                            if (typeof x === 'string' && x.indexOf('data:') === 0 && !have[x]) { mine.push(x); have[x] = 1; added++; }
+                        });
+                        if (added) { v.myStickerLibrary = mine; totalAdded += added; }
+                    }
+                } catch (e) {}
+                return orig(k, v);
+            };
+            return totalAdded;
+        } catch (e) { return 0; }
+    };
+    window.__mjSyncStickers();
+    [1500, 4000, 8000, 15000].forEach(function (t) {
+        setTimeout(function () {
+            try { window.__mjSyncStickers(); if (window.saveData) window.saveData(); } catch (e) {}
+        }, t);
+    });
+})();
+</script>
 </body>
 </html>
