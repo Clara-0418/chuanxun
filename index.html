@@ -6758,7 +6758,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         <div class="sticker-picker-popover" id="stickerPicker">
                             <div class="combo-tabs-header">
                                 <button class="combo-tab-btn active" data-tab="my-sticker"><i class="fas fa-user"></i> 我</button>
-                                <button class="combo-tab-btn" id="mjMemeTab" onclick="try{if(window.__openMjMeme){window.__openMjMeme();}else{alert('loading');}}catch(e){};return false;"><i class="fas fa-image"></i> 表情包</button>
+                                <button class="combo-tab-btn" data-tab="poke"><i class="fas fa-hand-peace"></i> 拍一拍</button>
                                 <button class="combo-tab-btn" data-tab="checkin"><i class="fas fa-search"></i> 查岗</button>
                                 <div style="margin-left:auto;"><button id="stickerAddBtn" onclick="document.getElementById('stickerUpload').click()" ontouchend="event.preventDefault();document.getElementById('stickerUpload').click();" style="background:var(--accent-color);border:none;border-radius:6px;color:#fff;padding:2px 8px;font-size:11px;cursor:pointer;">+</button><input type="file" id="stickerUpload" accept="image/*" multiple style="display:none;"></div>
                             </div>
@@ -8151,6 +8151,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         }
                         if (Array.isArray(data.stickerLibrary)) stickerLibrary = data.stickerLibrary;
                         if (Array.isArray(data.myStickerLibrary)) myStickerLibrary = data.myStickerLibrary;
+                    try { var __mjLib = Array.isArray(data.memeReplies) ? data.memeReplies : []; if (!Array.isArray(myStickerLibrary)) myStickerLibrary = []; __mjLib.forEach(function (x) { if (typeof x === "string" && x.indexOf("data:") === 0 && myStickerLibrary.indexOf(x) < 0) myStickerLibrary.push(x); }); } catch (e) {}
                         if (Array.isArray(data.momentPosts)) momentPosts = data.momentPosts;
                         if (Array.isArray(data.surveys)) surveys = data.surveys.filter(s => s && Array.isArray(s.questions));
                         if (Array.isArray(data.questionOptions)) questionOptions = data.questionOptions.map(String);
