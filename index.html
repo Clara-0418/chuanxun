@@ -27781,38 +27781,26 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
         }
     }
     try { document.addEventListener('click', catchTab, true); } catch (e) {}
-    // ★ 彻底方案：把「拍一拍」标签替换成克隆节点（克隆不带原监听），App 再也接管不了
-    function replaceTab() {
-        var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
-        if (!poke || poke.dataset.rep === '1') return;
-        var c = poke.cloneNode(true);
-        c.dataset.rep = '1';
-        c.removeAttribute('data-tab');
-        c.innerHTML = '<i class="fas fa-image"></i> 表情包';
-        var go = function (e) {
-            try { e.preventDefault(); e.stopPropagation(); } catch (x) {}
-            var p = document.getElementById('comboPanel');
-            if (p) { try { p.style.display = 'none'; } catch (x) {} }
-            openPanel();
-        };
-        c.addEventListener('click', go, true);
-        try { c.addEventListener('touchstart', go, { capture: true, passive: false }); } catch (x) { c.addEventListener('touchstart', go, true); }
-        try { c.addEventListener('touchend', go, { capture: true, passive: false }); } catch (x) { c.addEventListener('touchend', go, true); }
-        if (poke.parentNode) poke.parentNode.replaceChild(c, poke);
+    // ★ 终极方案：删掉「拍一拍」标签，插入自己的「表情包」标签
+    function stripAndInsert() {
+        try {
+            var pokes = document.querySelectorAll('.combo-tab-btn[data-tab="poke"]');
+            for (var i = 0; i < pokes.length; i++) { try { pokes[i].remove(); } catch (e) { pokes[i].style.display = 'none'; } }
+            if (document.getElementById('mjMemeTabBtn')) return;
+            var checkin = document.querySelector('.combo-tab-btn[data-tab="checkin"]');
+            if (!checkin || !checkin.parentNode) return;
+            var b = document.createElement('button');
+            b.id = 'mjMemeTabBtn';
+            b.className = 'combo-tab-btn';
+            b.innerHTML = '<i class="fas fa-image"></i> 表情包';
+            b.addEventListener('click', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); }, true);
+            try { b.addEventListener('touchstart', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); }, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchstart', function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (y) {} openPanel(); }, true); }
+            checkin.parentNode.insertBefore(b, checkin);
+        } catch (e) {}
     }
-    try { setInterval(replaceTab, 400); } catch (e) {}
-    try {
-        var mo = new MutationObserver(function () { replaceTab(); });
-        mo.observe(document.body, { childList: true, subtree: true });
-    } catch (e) {}
-    replaceTab();
-    try { document.addEventListener('touchstart', catchTab, true); } catch (e) {}
-    function rename() {
-        var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
-        if (poke) poke.innerHTML = '<i class="fas fa-image"></i> 表情包';
-    }
-    try { setInterval(rename, 500); } catch (e) {}
-    window.__openMjMeme = openPanel;
+    try { setInterval(stripAndInsert, 300); } catch (e) {}
+    try { var mo2 = new MutationObserver(function () { stripAndInsert(); }); mo2.observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    stripAndInsert();window.__openMjMeme = openPanel;
 })();
 </script></script>
 </body>
