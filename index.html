@@ -27657,5 +27657,46 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
             
         })();
     </script>
+<script>
+(function(){
+  try{
+    var SRC='data:audio/wav;base64,UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUAGAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
+    var a=null, ok=false;
+    function ensure(){
+      if(a) return a;
+      try{
+        a=document.createElement('audio');
+        a.id='kaAudio'; a.src=SRC; a.loop=true; a.volume=0.001; a.preload='auto';
+        a.setAttribute('playsinline',''); a.setAttribute('webkit-playsinline','');
+        a.style.display='none';
+        document.body.appendChild(a);
+      }catch(e){}
+      return a;
+    }
+    function meta(){
+      try{
+        if(!navigator.mediaSession||!window.MediaMetadata) return;
+        var s=(window.settings||{});
+        navigator.mediaSession.metadata=new MediaMetadata({
+          title:'\u4f20\u8baf', artist:(s.partnerName||'\u68a6\u89d2'), album:'\u966a\u4f34\u4e2d',
+          artwork:[{src:'icon-512.png',sizes:'512x512',type:'image/png'}]
+        });
+        navigator.mediaSession.playbackState='playing';
+      }catch(e){}
+    }
+    function arm(){
+      var el=ensure(); if(!el) return;
+      try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
+      if(el.paused){ var p=el.play(); if(p&&p.then){ p.then(function(){ ok=true; meta(); }, function(){}); } }
+      else { ok=true; meta(); }
+    }
+    function onTap(){ arm(); setTimeout(arm,400); setTimeout(arm,1500); setTimeout(arm,4000); }
+    ['pointerdown','touchstart','click','touchend'].forEach(function(ev){ try{ document.addEventListener(ev,onTap,true); }catch(e){} });
+    try{ document.addEventListener('visibilitychange',function(){ if(!document.hidden){ setTimeout(arm,300); setTimeout(arm,1200); } }); }catch(e){}
+    try{ setInterval(function(){ if(!document.hidden) arm(); },120000); }catch(e){}
+    try{ setTimeout(arm,2500); }catch(e){}
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
