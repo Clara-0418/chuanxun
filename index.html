@@ -6692,7 +6692,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         <div class="sticker-picker-popover" id="stickerPicker">
                             <div class="combo-tabs-header">
                                 <button class="combo-tab-btn active" data-tab="my-sticker"><i class="fas fa-user"></i> 我</button>
-                                <button class="combo-tab-btn" id="mjMemeTab" onclick="try{if(window.__openMjMeme){window.__openMjMeme();}else{alert(&quot;表情模块未加载&quot;);}}catch(e){};return false;"><i class="fas fa-image"></i> 表情包</button>
+                                <button id="mjMemeTab" onclick="try{if(window.__openMjMeme){window.__openMjMeme();}else{alert(String.fromCharCode(0x8868)+String.fromCharCode(0x60C5)+&quot;模块未加载&quot;);}}catch(e){};return false;" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:none;border-radius:999px;background:#fce7ec;color:#c0788a;font-size:14px;font-weight:600;margin:0 4px;"><i class="fas fa-image"></i> 表情包</button>
                                 <button class="combo-tab-btn" data-tab="checkin"><i class="fas fa-search"></i> 查岗</button>
                                 <div style="margin-left:auto;"><button id="stickerAddBtn" onclick="document.getElementById('stickerUpload').click()" ontouchend="event.preventDefault();document.getElementById('stickerUpload').click();" style="background:var(--accent-color);border:none;border-radius:6px;color:#fff;padding:2px 8px;font-size:11px;cursor:pointer;">+</button><input type="file" id="stickerUpload" accept="image/*" multiple style="display:none;"></div>
                             </div>
