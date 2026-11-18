@@ -99,6 +99,63 @@
 
     var idbLines = [], otherLines = [];
     Promise.resolve()
+        .then(function () {
+            // 先列出所有数据库（关键：数据可能在别的库里）
+            return new Promise(function (res) {
+                try {
+                    if (indexedDB.databases) {
+                        indexedDB.databases().then(function (list) {
+                            idbLines.push('=== 全部数据库 ===');
+                            (list || []).forEach(function (d) { idbLines.push('  · ' + d.name + (d.version ? (' v' + d.version) : '')); });
+                            if (!list || !list.length) idbLines.push('  （一个都没有）');
+                            idbLines.push('==================');
+                            res();
+                        }, function () { res(); });
+                    } else { idbLines.push('（此浏览器不支持枚举数据库）'); res(); }
+                } catch (e) { res(); }
+            });
+        })
+        .then(function () {
+            // 逐个库统计记录数，找出哪个库里有 CHAT_APP_V13_appData
+            return new Promise(function (res) {
+                var names = ['localforage', 'chat_app_db', 'chat_app_kv', 'CHAT_APP_V13', 'chat_app_shim', 'appdata', 'chatAppDb'];
+                var chain = Promise.resolve();
+                idbLines.push('=== 逐个库检查 ===');
+                names.forEach(function (nm) {
+                    chain = chain.then(function () {
+                        return openDb(nm).then(function (db) {
+                            if (!db) return;
+                            var sts = Array.prototype.slice.call(db.objectStoreNames);
+                            if (!sts.length) { idbLines.push('  ' + nm + '：存在但没有表'); try { db.close(); } catch (e) {} return; }
+                            idbLines.push('  ' + nm + '：表 ' + sts.join(', '));
+                            var c2 = Promise.resolve();
+                            sts.forEach(function (st) {
+                                c2 = c2.then(function () {
+                                    var tx, store;
+                                    try { tx = db.transaction(st, 'readonly'); store = tx.objectStore(st); } catch (e) { return; }
+                                    return getAll(store).then(function (arr) {
+                                        idbLines.push('     └ ' + st + '：' + arr.length + ' 条');
+                                        arr.forEach(function (rec) {
+                                            var k = rec && rec.key;
+                                            if (k) {
+                                                idbLines.push('        · key=' + k + ' 大小=' + fmt(typeof rec.value === 'string' ? rec.value.length : JSON.stringify(rec.value || '').length));
+                                                dump.indexedDB[nm + '.' + st] = dump.indexedDB[nm + '.' + st] || {};
+                                                dump.indexedDB[nm + '.' + st][k] = rec.value;
+                                                if (String(k).indexOf('appData') >= 0) {
+                                                    idbLines.push('        ▸ 摘要：\n' + summarize(rec.value).replace(/\n/g, '\n          '));
+                                                }
+                                            }
+                                        });
+                                    });
+                                });
+                            });
+                            return c2.then(function () { try { db.close(); } catch (e) {} });
+                        });
+                    });
+                });
+                return chain.then(res);
+            });
+        })
         .then(function () { return openDb('localforage'); })
         .then(function (db) {
             if (!db) { idbLines.push('库 localforage：不存在或打不开'); return; }
