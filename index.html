@@ -27781,6 +27781,31 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
         }
     }
     try { document.addEventListener('click', catchTab, true); } catch (e) {}
+    // ★ 彻底方案：把「拍一拍」标签替换成克隆节点（克隆不带原监听），App 再也接管不了
+    function replaceTab() {
+        var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
+        if (!poke || poke.dataset.rep === '1') return;
+        var c = poke.cloneNode(true);
+        c.dataset.rep = '1';
+        c.removeAttribute('data-tab');
+        c.innerHTML = '<i class="fas fa-image"></i> 表情包';
+        var go = function (e) {
+            try { e.preventDefault(); e.stopPropagation(); } catch (x) {}
+            var p = document.getElementById('comboPanel');
+            if (p) { try { p.style.display = 'none'; } catch (x) {} }
+            openPanel();
+        };
+        c.addEventListener('click', go, true);
+        try { c.addEventListener('touchstart', go, { capture: true, passive: false }); } catch (x) { c.addEventListener('touchstart', go, true); }
+        try { c.addEventListener('touchend', go, { capture: true, passive: false }); } catch (x) { c.addEventListener('touchend', go, true); }
+        if (poke.parentNode) poke.parentNode.replaceChild(c, poke);
+    }
+    try { setInterval(replaceTab, 400); } catch (e) {}
+    try {
+        var mo = new MutationObserver(function () { replaceTab(); });
+        mo.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+    replaceTab();
     try { document.addEventListener('touchstart', catchTab, true); } catch (e) {}
     function rename() {
         var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
