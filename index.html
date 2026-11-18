@@ -27699,28 +27699,43 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
 })();
 </script>
 <script>/* ===== 把「拍一拍」换成「表情包」（显示 memeReplies 里的表情） ===== */
-(function () {
-    function fix() {
+<script>(function () {
+    function openMeme() {
         try {
-            var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
-            if (poke && poke.dataset.pokeDone !== '1') {
-                poke.dataset.pokeDone = '1';
-                poke.setAttribute('data-tab', 'meme');
-                poke.innerHTML = '<i class="fas fa-image"></i> 表情包';
-            }
-            // 若原本还有别的 meme 标签，避免重复：保留我们改过的这个
-            var memes = document.querySelectorAll('.combo-tab-btn[data-tab="meme"]');
-            if (memes.length > 1) {
-                for (var i = 0; i < memes.length; i++) {
-                    if (memes[i].dataset.pokeDone !== '1') { try { memes[i].style.display = 'none'; } catch (e) {} }
+            var lib = document.getElementById('replyLibBtn');
+            if (lib) lib.click();
+            setTimeout(function () {
+                var btns = document.querySelectorAll('#replyLibraryModal button, #replyLibModal button, .modal button');
+                for (var i = 0; i < btns.length; i++) {
+                    var tx = (btns[i].textContent || '').replace(/\s/g, '');
+                    if (tx === '表情包' && btns[i].offsetParent !== null) { btns[i].click(); return; }
                 }
-            }
+                // 兜底：全局再找一次
+                var all = document.querySelectorAll('button, div[data-tab], span');
+                for (var j = 0; j < all.length; j++) {
+                    var t2 = (all[j].textContent || '').replace(/\s/g, '');
+                    if (t2 === '表情包' && all[j].offsetParent !== null) { all[j].click(); return; }
+                }
+            }, 350);
         } catch (e) {}
     }
+    function fix() {
+        var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
+        if (!poke || poke.dataset.pokeDone === '1') return;
+        poke.dataset.pokeDone = '1';
+        poke.setAttribute('data-tab', 'mj-meme');
+        poke.innerHTML = '<i class="fas fa-image"></i> 表情包';
+        poke.addEventListener('click', function (ev) {
+            try { ev.stopPropagation(); ev.preventDefault(); } catch (e) {}
+            var combo = document.getElementById('comboPanel');
+            if (combo) combo.style.display = 'none';
+            openMeme();
+        }, true);
+    }
     fix();
-    [200, 800, 2000, 5000, 10000].forEach(function (x) { setTimeout(fix, x); });
+    [200, 800, 2000, 5000].forEach(function (x) { setTimeout(fix, x); });
     setInterval(fix, 3000);
-    window.__pokeToMeme = fix;
-})();</script>
+    window.__openMjMeme = openMeme;
+})();</script></script>
 </body>
 </html>
