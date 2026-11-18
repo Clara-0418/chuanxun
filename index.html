@@ -27698,5 +27698,29 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
   }catch(e){}
 })();
 </script>
+<script>/* ===== 把「拍一拍」换成「表情包」（显示 memeReplies 里的表情） ===== */
+(function () {
+    function fix() {
+        try {
+            var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
+            if (poke && poke.dataset.pokeDone !== '1') {
+                poke.dataset.pokeDone = '1';
+                poke.setAttribute('data-tab', 'meme');
+                poke.innerHTML = '<i class="fas fa-image"></i> 表情包';
+            }
+            // 若原本还有别的 meme 标签，避免重复：保留我们改过的这个
+            var memes = document.querySelectorAll('.combo-tab-btn[data-tab="meme"]');
+            if (memes.length > 1) {
+                for (var i = 0; i < memes.length; i++) {
+                    if (memes[i].dataset.pokeDone !== '1') { try { memes[i].style.display = 'none'; } catch (e) {} }
+                }
+            }
+        } catch (e) {}
+    }
+    fix();
+    [200, 800, 2000, 5000, 10000].forEach(function (x) { setTimeout(fix, x); });
+    setInterval(fix, 3000);
+    window.__pokeToMeme = fix;
+})();</script>
 </body>
 </html>
