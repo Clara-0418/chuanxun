@@ -27810,7 +27810,20 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
             try { b.addEventListener('touchend', go, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchend', go, true); }
             checkin.parentNode.insertBefore(b, checkin);
         } catch (e) {}
-    }    stripAndInsert();window.__openMjMeme = openPanel;
+    }    // ★ 明显的浮动按钮：只要脚本在跑就一定能看到
+    function ensureFab() {
+        try {
+            if (document.getElementById('mjMemeFab')) return;
+            var f = document.createElement('div');
+            f.id = 'mjMemeFab';
+            f.innerHTML = '😀';
+            f.style.cssText = 'position:fixed;right:14px;bottom:150px;width:46px;height:46px;border-radius:50%;background:#d99ba8;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:99990;box-shadow:0 4px 14px rgba(0,0,0,.25);';
+            f.onclick = function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); };
+            document.body.appendChild(f);
+        } catch (e) {}
+    }
+    try { setInterval(ensureFab, 800); } catch (e) {}
+    ensureFab();    stripAndInsert();window.__openMjMeme = openPanel;
 })();
 </script></script>
 </body>
