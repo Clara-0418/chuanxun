@@ -27699,25 +27699,67 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
 })();
 </script>
 <script>/* ===== 把「拍一拍」换成「表情包」（显示 memeReplies 里的表情） ===== */
-<script>(function () {
-    function openMeme() {
+<script>
+(function () {
+    function stickers() {
+        try { if (Array.isArray(window.memeReplies)) return window.memeReplies; } catch (e) {}
         try {
-            var lib = document.getElementById('replyLibBtn');
-            if (lib) lib.click();
-            setTimeout(function () {
-                var btns = document.querySelectorAll('#replyLibraryModal button, #replyLibModal button, .modal button');
-                for (var i = 0; i < btns.length; i++) {
-                    var tx = (btns[i].textContent || '').replace(/\s/g, '');
-                    if (tx === '表情包' && btns[i].offsetParent !== null) { btns[i].click(); return; }
-                }
-                // 兜底：全局再找一次
-                var all = document.querySelectorAll('button, div[data-tab], span');
-                for (var j = 0; j < all.length; j++) {
-                    var t2 = (all[j].textContent || '').replace(/\s/g, '');
-                    if (t2 === '表情包' && all[j].offsetParent !== null) { all[j].click(); return; }
-                }
-            }, 350);
+            var fd = window.featureData || {};
+            if (Array.isArray(fd.memeReplies)) return fd.memeReplies;
         } catch (e) {}
+        return [];
+    }
+    function send(src) {
+        try {
+            var name = (window.settings && window.settings.myName) || '我';
+            if (typeof window.addMessage === 'function') { window.addMessage({ sender: name, text: '', image: src }); return true; }
+        } catch (e) {}
+        return false;
+    }
+    function closePanel() {
+        var p = document.getElementById('mjMemePanel');
+        if (p) p.remove();
+    }
+    function openPanel() {
+        closePanel();
+        var list = stickers().filter(function (x) { return typeof x === 'string' && x.indexOf('data:') === 0; });
+        var wrap = document.createElement('div');
+        wrap.id = 'mjMemePanel';
+        wrap.style.cssText = 'position:fixed;left:0;right:0;bottom:0;top:12%;background:rgba(0,0,0,.35);z-index:99998;display:flex;align-items:flex-end;';
+        var box = document.createElement('div');
+        box.style.cssText = 'width:100%;max-height:78%;overflow:auto;background:var(--primary-bg,#fff);border-radius:16px 16px 0 0;padding:12px;box-sizing:border-box;';
+        var head = document.createElement('div');
+        head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:14px;font-weight:600;color:var(--text-primary,#333);';
+        head.innerHTML = '<span>梦角的表情包（' + list.length + '）</span>';
+        var closeBtn = document.createElement('span');
+        closeBtn.textContent = '关闭';
+        closeBtn.style.cssText = 'font-size:13px;color:var(--text-secondary,#888);padding:4px 10px;';
+        closeBtn.onclick = closePanel;
+        head.appendChild(closeBtn);
+        box.appendChild(head);
+        if (!list.length) {
+            var empty = document.createElement('div');
+            empty.textContent = '还没有表情包，去「字卡库 → 表情包 → 上传图片」添加';
+            empty.style.cssText = 'padding:24px 8px;font-size:13px;color:var(--text-secondary,#888);text-align:center;';
+            box.appendChild(empty);
+        } else {
+            var grid = document.createElement('div');
+            grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
+            list.forEach(function (src) {
+                var cell = document.createElement('div');
+                cell.style.cssText = 'aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:var(--secondary-bg,#f5f5f5);display:flex;align-items:center;justify-content:center;';
+                var img = document.createElement('img');
+                img.src = src;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                img.onclick = function () { if (send(src)) closePanel(); };
+                cell.appendChild(img);
+                grid.appendChild(cell);
+            });
+            box.appendChild(grid);
+        }
+        wrap.appendChild(box);
+        wrap.onclick = function (e) { if (e.target === wrap) closePanel(); };
+        document.body.appendChild(wrap);
     }
     function fix() {
         var poke = document.querySelector('.combo-tab-btn[data-tab="poke"]');
@@ -27727,15 +27769,16 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
         poke.innerHTML = '<i class="fas fa-image"></i> 表情包';
         poke.addEventListener('click', function (ev) {
             try { ev.stopPropagation(); ev.preventDefault(); } catch (e) {}
-            var combo = document.getElementById('comboPanel');
-            if (combo) combo.style.display = 'none';
-            openMeme();
+            var p = document.getElementById('comboPanel');
+            if (p) { try { p.style.display = 'none'; } catch (e) {} }
+            setTimeout(openPanel, 60);
         }, true);
     }
     fix();
     [200, 800, 2000, 5000].forEach(function (x) { setTimeout(fix, x); });
     setInterval(fix, 3000);
-    window.__openMjMeme = openMeme;
-})();</script></script>
+    window.__openMjMeme = openPanel;
+})();
+</script></script>
 </body>
 </html>
