@@ -8151,7 +8151,47 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         }
                         if (Array.isArray(data.stickerLibrary)) stickerLibrary = data.stickerLibrary;
                         if (Array.isArray(data.myStickerLibrary)) myStickerLibrary = data.myStickerLibrary;
-                    try { var __mjLib = Array.isArray(data.memeReplies) ? data.memeReplies : []; if (!Array.isArray(myStickerLibrary)) myStickerLibrary = []; __mjLib.forEach(function (x) { if (typeof x === "string" && x.indexOf("data:") === 0 && myStickerLibrary.indexOf(x) < 0) myStickerLibrary.push(x); }); } catch (e) {}
+                    try {
+                        var __mjLib = Array.isArray(data.memeReplies) ? data.memeReplies : [];
+                        if (!Array.isArray(myStickerLibrary)) myStickerLibrary = [];
+                        var __seen = {}, __uniq = [];
+                        for (var __i = 0; __i < __mjLib.length; __i++) { if (typeof __mjLib[__i] === 'string') __seen[__mjLib[__i]] = 1; }
+                        for (var __j = 0; __j < myStickerLibrary.length; __j++) {
+                            var __s = myStickerLibrary[__j];
+                            if (typeof __s !== 'string' || !__seen[__s]) { __uniq.push(__s); __seen[__s] = 1; }
+                        }
+                        myStickerLibrary = __uniq;
+                        if (Array.isArray(data.stickerLibrary)) {
+                            var __seen2 = {}, __uniq2 = [];
+                            for (var __k = 0; __k < data.stickerLibrary.length; __k++) {
+                                var __s2 = data.stickerLibrary[__k];
+                                if (typeof __s2 !== 'string' || (!__seen[__s2] && !__seen2[__s2])) { __uniq2.push(__s2); __seen2[__s2] = 1; }
+                            }
+                            stickerLibrary = __uniq2;
+                        }
+                    } catch (e) {}
+                    try {
+                        var __lastSteal = Number(data.__lastStealAt || 0);
+                        if (Date.now() - __lastSteal > 20 * 60 * 1000 && Math.random() < 0.5) {
+                            var __cands = (messages || []).filter(function (m) {
+                                return m && typeof m.text === 'string' && !m.image && m.sender !== (settings.partnerName || '\u68a6\u89d2')
+                                    && m.text.trim().length >= 2 && m.text.length <= 30 && m.type !== 'system';
+                            });
+                            if (__cands.length) {
+                                var __pick = __cands[Math.floor(Math.random() * __cands.length)];
+                                if (!Array.isArray(customReplies)) customReplies = [];
+                                if (customReplies.indexOf(__pick.text) < 0) {
+                                    customReplies.push(__pick.text);
+                                    data.__lastStealAt = Date.now();
+                                    setTimeout(function () {
+                                        try {
+                                            addMessage({ sender: '\u7cfb\u7edf', text: (settings.partnerName || '\u68a6\u89d2') + ' \u5077\u8d70\u4e86\u4f60\u7684\u300c' + __pick.text + '\u300d', type: 'system' });
+                                        } catch (e) {}
+                                    }, 1200);
+                                }
+                            }
+                        }
+                    } catch (e) {}
                         if (Array.isArray(data.momentPosts)) momentPosts = data.momentPosts;
                         if (Array.isArray(data.surveys)) surveys = data.surveys.filter(s => s && Array.isArray(s.questions));
                         if (Array.isArray(data.questionOptions)) questionOptions = data.questionOptions.map(String);
