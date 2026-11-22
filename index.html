@@ -9576,7 +9576,7 @@ function partnerMaybeReact(chance) {
         const lib = Array.isArray(emojiReplies) ? emojiReplies.filter(x => typeof x === 'string' && x) : [];
         if (!lib.length) return false;
         const emoji = lib[Math.floor(Math.random() * lib.length)];
-        const recent = messages.slice(-30).filter(m => m && !m.recalled && m.type !== 'system' && !m.redPacket);
+        const recent = messages.slice(-30).filter(m => m && !m.recalled && m.type !== 'system' && !m.redPacket && !isPartnerSender(m.sender) && (m.text || m.image));
         if (!recent.length) return false;
         const pick = recent[Math.floor(Math.random() * recent.length)];
         if (!Array.isArray(pick.reactions)) pick.reactions = [];
