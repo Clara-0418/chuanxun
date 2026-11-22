@@ -9566,6 +9566,30 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                 } catch (e) { return false; }
             }
             window.partnerMaybeRecallMessage = partnerMaybeRecallMessage;
+// ===== 梦角随机贴 emoji 表态（从 emoji 库随机抽取，纯随机无冷却） =====
+const PARTNER_REACT_CHANCE = 0.08;
+function partnerMaybeReact(chance) {
+    try {
+        if (settings.isBlocked) return false;
+        const p = (typeof chance === 'number') ? chance : PARTNER_REACT_CHANCE;
+        if (!(Math.random() < p)) return false;
+        const lib = Array.isArray(emojiReplies) ? emojiReplies.filter(x => typeof x === 'string' && x) : [];
+        if (!lib.length) return false;
+        const emoji = lib[Math.floor(Math.random() * lib.length)];
+        const recent = messages.slice(-30).filter(m => m && !m.recalled && m.type !== 'system' && !m.redPacket);
+        if (!recent.length) return false;
+        const pick = recent[Math.floor(Math.random() * recent.length)];
+        if (!Array.isArray(pick.reactions)) pick.reactions = [];
+        for (let i = 0; i < pick.reactions.length; i++) {
+            if (pick.reactions[i] && pick.reactions[i].emoji === emoji && pick.reactions[i].by === 'partner') return false;
+        }
+        pick.reactions.push({ emoji: emoji, by: 'partner' });
+        requestRender();
+        saveData();
+        return true;
+    } catch (e) { return false; }
+}
+window.partnerMaybeReact = partnerMaybeReact;
             function addMessage(msg) {
                 if (!msg.timestamp) msg.timestamp = new Date();
                 if (!msg.id) msg.id = Date.now() + Math.random();
@@ -9645,7 +9669,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             function simulateReply() {
-                try { partnerMaybeRecallMessage(); } catch (e) {}
+                try { partnerMaybeRecallMessage(); } catch (e) {} try { partnerMaybeReact(); } catch (e) {}
                 if (settings.isBlocked) return;
                 // 梦角随机发红包（祝福语来自红包祝福语库）
                 const rpChance = Math.max(0, Math.min(100, numOr(settings.partnerRedPacketChance, 12)));
@@ -9698,7 +9722,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             function partnerAutoSend() {
-                try { partnerMaybeRecallMessage(); } catch (e) {}
+                try { partnerMaybeRecallMessage(); } catch (e) {} try { partnerMaybeReact(); } catch (e) {}
                 if (settings.isBlocked || !settings.partnerAutoSend) return;
                 const allPools = [...customReplies, ...kaomojiReplies, ...emojiReplies];
                 if (allPools.length === 0) return;
@@ -13361,7 +13385,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             function startPartnerStatusTimer() {
                 if (partnerStatusTimer) clearInterval(partnerStatusTimer);
                 partnerStatusTimer = setInterval(() => {
-                    try { partnerMaybeRecallMessage(); } catch (e) {}
+                    try { partnerMaybeRecallMessage(); } catch (e) {} try { partnerMaybeReact(); } catch (e) {}
                     if (settings.isBlocked) return;
                     if (Math.random() < 0.7) partnerRandomizeStatus(true);
                 }, 90000);
@@ -28426,20 +28450,7 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
             try { b.addEventListener('touchend', go, { capture: true, passive: false }); } catch (x) { b.addEventListener('touchend', go, true); }
             checkin.parentNode.insertBefore(b, checkin);
         } catch (e) {}
-    }    // ★ 明显的浮动按钮：只要脚本在跑就一定能看到
-    function ensureFab() {
-        try {
-            if (document.getElementById('mjMemeFab')) return;
-            var f = document.createElement('div');
-            f.id = 'mjMemeFab';
-            f.innerHTML = '😀';
-            f.style.cssText = 'position:fixed;right:14px;bottom:150px;width:46px;height:46px;border-radius:50%;background:#d99ba8;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:99990;box-shadow:0 4px 14px rgba(0,0,0,.25);';
-            f.onclick = function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (x) {} openPanel(); };
-            document.body.appendChild(f);
-        } catch (e) {}
-    }
-    try { setInterval(ensureFab, 800); } catch (e) {}
-    ensureFab();    stripAndInsert();window.__openMjMeme = openPanel;
+    }    /* 浮动按钮已移除 */    stripAndInsert();window.__openMjMeme = openPanel;
 })();
 </script></script>
 <script>
