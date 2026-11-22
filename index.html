@@ -6659,6 +6659,134 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
         html body #keepAliveBadge.active { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
 
         [data-feature="habit"] { display: none !important; }
+
+        /* ===== 撤回消息：灰色系统样式（保留消息对象与时间戳） ===== */
+        .recalled-message {
+            align-self: center;
+            max-width: 100%;
+            width: 100%;
+            text-align: center;
+            font-size: 11px;
+            line-height: 1.6;
+            padding: 5px 0;
+            color: var(--text-secondary);
+            opacity: 0.75;
+            display: flex;
+            justify-content: center;
+        }
+        .recalled-message .recalled-inner {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text-secondary);
+            max-width: 90%;
+            word-break: break-word;
+        }
+        html[data-theme="dark"] .recalled-message .recalled-inner { background: rgba(255, 255, 255, 0.07); }
+
+        /* ===== 消息表情表态：气泡下方小圆角标签 ===== */
+        .msg-reactions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin: 3px 8px 0;
+            max-width: 100%;
+        }
+        .message-wrapper.received .msg-reactions { justify-content: flex-start; }
+        .message-wrapper.sent .msg-reactions { justify-content: flex-end; }
+        .msg-reaction-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-size: 12px;
+            line-height: 1.6;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            user-select: none;
+        }
+        .msg-reaction-chip.mine {
+            border-color: rgba(var(--accent-color-rgb), 0.55);
+            background: rgba(var(--accent-color-rgb), 0.12);
+        }
+        .msg-reaction-chip .rc-count { font-size: 10px; color: var(--text-secondary); }
+
+        /* ===== 长按气泡弹出的表态面板 ===== */
+        #msgReactionPanel {
+            position: fixed;
+            left: 8px;
+            top: 8px;
+            z-index: 10000;
+            display: none;
+            opacity: 0;
+            transform: translateY(6px) scale(0.96);
+            transition: opacity 0.16s ease, transform 0.16s ease;
+            box-sizing: border-box;
+            max-width: calc(100vw - 16px);
+            padding: 8px;
+            border-radius: 16px;
+            background: var(--secondary-bg);
+            border: 1px solid rgba(var(--accent-color-rgb), 0.18);
+            box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
+        }
+        #msgReactionPanel.show { opacity: 1; transform: translateY(0) scale(1); }
+        #msgReactionPanel .mrp-emoji-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            padding: 2px;
+            max-width: 280px;
+            scrollbar-width: none;
+        }
+        #msgReactionPanel .mrp-emoji-row::-webkit-scrollbar { display: none; width: 0; }
+        #msgReactionPanel .mrp-emoji {
+            flex: 0 0 auto;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            border: none;
+            border-radius: 10px;
+            background: var(--primary-bg);
+            color: var(--text-primary);
+            font-size: 20px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #msgReactionPanel .mrp-emoji.selected { background: rgba(var(--accent-color-rgb), 0.22); }
+        #msgReactionPanel .mrp-emoji:active { transform: scale(0.9); }
+        #msgReactionPanel .mrp-empty { font-size: 12px; color: var(--text-secondary); padding: 8px 6px; white-space: nowrap; }
+        #msgReactionPanel .mrp-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border-color);
+        }
+        #msgReactionPanel .mrp-action {
+            flex: 1;
+            padding: 7px 6px;
+            border: none;
+            border-radius: 10px;
+            background: var(--primary-bg);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-family: var(--font-family);
+            cursor: pointer;
+        }
+        #msgReactionPanel .mrp-action.danger { color: #ff4757; }
+        #msgReactionPanel .mrp-action:active { background: rgba(var(--accent-color-rgb), 0.14); }
+        /* 长按时不要弹出系统选择/放大菜单 */
+        .message { -webkit-touch-callout: none; }
 </style>
 </head>
 <body ontouchstart="" ontouchmove="" ontouchend="" style="overscroll-behavior: none;">
@@ -8173,7 +8301,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     try {
                         if (Math.random() < 0.35) {
                             var __cands = (messages || []).filter(function (m) {
-                                return m && typeof m.text === 'string' && !m.image && m.sender !== (settings.partnerName || '\u68a6\u89d2')
+                                return m && !m.recalled && typeof m.text === 'string' && !m.image && m.sender !== (settings.partnerName || '\u68a6\u89d2')
                                     && m.text.trim().length >= 2 && m.text.length <= 30 && m.type !== 'system';
                             });
                             if (__cands.length) {
@@ -8189,10 +8317,6 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                                     setTimeout(function () {
                                         try { addMessage({ sender: (settings.partnerName || '\u68a6\u89d2'), text: __pick.text }); } catch (e) {}
                                     }, 3000);
-                                }
-                            }
-                        }
-                                    }, 1200);
                                 }
                             }
                         }
@@ -8709,6 +8833,19 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                         lastDate = msgDate;
                         lastSender = null;
                     }
+                    // ===== 撤回消息：保留消息对象与 timestamp，只渲染成灰色系统样式 =====
+                    if (msg.recalled) {
+                        const rec = document.createElement('div');
+                        rec.className = 'recalled-message';
+                        rec.dataset.id = msg.id != null ? msg.id : ('i_' + idx);
+                        const recInner = document.createElement('span');
+                        recInner.className = 'recalled-inner';
+                        recInner.textContent = (isUserSender(msg.sender) ? '你' : (settings.partnerName || '梦角')) + '撤回了一条消息';
+                        rec.appendChild(recInner);
+                        chatContainer.appendChild(rec);
+                        lastSender = null;
+                        return;
+                    }
                     if (msg.type === 'system') {
                         const sys = document.createElement('div');
                         sys.className = 'system-message';
@@ -8940,6 +9077,15 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                             });
                         });
                     }
+                    // 自己的消息：操作栏补一个「撤回」（气泡被点击后弹出的那条菜单）
+                    try {
+                        const __popup = contentWrap.querySelector('.message-actions-popup');
+                        if (__popup && isUser) appendRecallToPopup(__popup, msg);
+                    } catch (e) {}
+                    // ===== 表情表态：贴过的 emoji 以圆角小标签显示在气泡下方 =====
+                    if (Array.isArray(msg.reactions) && msg.reactions.length) {
+                        try { contentWrap.appendChild(buildReactionBar(msg)); } catch (e) {}
+                    }
                     const meta = document.createElement('div');
                     meta.className = 'message-meta';
                     if (!settings.hideTimestamp) { const ts = new Date(msg.timestamp); const timeStr = ts
@@ -8968,6 +9114,338 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
                     textEl.style.overflow = 'hidden';
                     el.textContent = '展开'; }
             };
+
+            // ============================================================
+            // 撤回消息 / 表情表态（长按气泡）
+            // 数据只挂在消息对象上：msg.recalled、msg.reactions，不新增顶层字段
+            // ============================================================
+
+            // 撤回：只打标记 + 清空展示内容，保留消息对象本身与 timestamp（不从数组删除）
+            function recallMessage(msg) {
+                try {
+                    if (!msg || msg.recalled) return false;
+                    if (msg.type === 'system') return false;
+                    msg.recalled = true;
+                    msg.recalledAt = Date.now();
+                    msg.text = '';
+                    msg.image = '';
+                    saveData();
+                    requestRender();
+                    try { showNotification('已撤回', 'success', 1500); } catch (e) {}
+                    return true;
+                } catch (e) { return false; }
+            }
+            window.recallMessage = recallMessage;
+
+            // 表态：同一个 emoji 同一个人只算一次；再点一次同一个 emoji 视为取消
+            function addMessageReaction(msg, emoji) {
+                try {
+                    if (!msg || !emoji) return false;
+                    if (!Array.isArray(msg.reactions)) msg.reactions = [];
+                    var who = 'me';
+                    var found = -1;
+                    for (var i = 0; i < msg.reactions.length; i++) {
+                        var r = msg.reactions[i];
+                        if (r && r.emoji === emoji && r.by === who) { found = i; break; }
+                    }
+                    if (found >= 0) msg.reactions.splice(found, 1);
+                    else msg.reactions.push({ emoji: emoji, by: who });
+                    saveData();
+                    requestRender();
+                    return true;
+                } catch (e) { return false; }
+            }
+            window.addMessageReaction = addMessageReaction;
+
+            // 气泡下方的表态标签：同一个 emoji 合并成一个标签，自己的表态高亮
+            function buildReactionBar(msg) {
+                var bar = document.createElement('div');
+                bar.className = 'msg-reactions';
+                var list = (msg && Array.isArray(msg.reactions)) ? msg.reactions : [];
+                var order = [], stat = {};
+                for (var i = 0; i < list.length; i++) {
+                    var r = list[i];
+                    if (!r || typeof r.emoji !== 'string' || !r.emoji) continue;
+                    if (!stat[r.emoji]) { stat[r.emoji] = { emoji: r.emoji, count: 0, mine: false }; order.push(r.emoji); }
+                    stat[r.emoji].count++;
+                    if (r.by === 'me') stat[r.emoji].mine = true;
+                }
+                for (var k = 0; k < order.length; k++) {
+                    var g = stat[order[k]];
+                    var chip = document.createElement('span');
+                    chip.className = 'msg-reaction-chip' + (g.mine ? ' mine' : '');
+                    var em = document.createElement('span');
+                    em.className = 'rc-emoji';
+                    em.textContent = g.emoji;
+                    chip.appendChild(em);
+                    if (g.count > 1) {
+                        var cnt = document.createElement('span');
+                        cnt.className = 'rc-count';
+                        cnt.textContent = String(g.count);
+                        chip.appendChild(cnt);
+                    }
+                    bar.appendChild(chip);
+                }
+                return bar;
+            }
+
+            // 自己的消息：在原有操作栏里追加一个「撤回」按钮（不动原有按钮）
+            function appendRecallToPopup(popup, msg) {
+                try {
+                    if (!popup || !msg || msg.recalled) return false;
+                    if (!isUserSender(msg.sender)) return false;
+                    if (popup.querySelector('.recall-btn')) return false;
+                    var b = document.createElement('button');
+                    b.className = 'msg-action-btn recall-btn';
+                    b.dataset.action = 'recall';
+                    b.innerHTML = '<i class="fas fa-undo"></i><span>撤回</span>';
+                    b.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        if (popup.classList) popup.classList.remove('show');
+                        recallMessage(msg);
+                    });
+                    popup.appendChild(b);
+                    return true;
+                } catch (e) { return false; }
+            }
+
+            // ===== 长按气泡（340ms）：弹出横向 emoji 表态面板 =====
+            var MRP_LONG_PRESS_MS = 340;
+            var mrpMsg = null;               // 当前面板对应的消息对象
+            var mrpAnchor = null;            // 当前面板对应的气泡元素
+            var mrpPressTimer = null;
+            var mrpPressX = 0, mrpPressY = 0;
+            var mrpSuppressClickUntil = 0;   // 长按结束后抑制紧随其后的 click，避免误触操作栏/双击看大图
+
+            function ensureReactionPanel() {
+                var panel = document.getElementById('msgReactionPanel');
+                if (panel) return panel;
+                panel = document.createElement('div');
+                panel.id = 'msgReactionPanel';
+                var row = document.createElement('div');
+                row.className = 'mrp-emoji-row';
+                var acts = document.createElement('div');
+                acts.className = 'mrp-actions';
+                panel.appendChild(row);
+                panel.appendChild(acts);
+                document.body.appendChild(panel);
+                panel.addEventListener('click', function (e) { e.stopPropagation(); });
+                panel.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+                return panel;
+            }
+
+            function closeReactionPanel() {
+                mrpMsg = null;
+                mrpAnchor = null;
+                var panel = document.getElementById('msgReactionPanel');
+                if (!panel) return;
+                panel.classList.remove('show');
+                panel.style.display = 'none';
+            }
+            window.closeMessageReactionPanel = closeReactionPanel;
+
+            function positionReactionPanel(panel, anchor) {
+                try {
+                    var vw = window.innerWidth || document.documentElement.clientWidth || 360;
+                    var vh = window.innerHeight || document.documentElement.clientHeight || 640;
+                    var pw = panel.offsetWidth || 280;
+                    var ph = panel.offsetHeight || 96;
+                    var r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : null;
+                    var left, top;
+                    if (!r || (!r.width && !r.height)) {
+                        // 锚点已被重渲染/脱离文档：退回屏幕中部，别贴到左上角
+                        left = (vw - pw) / 2;
+                        top = Math.round(vh * 0.5) - ph / 2;
+                    } else {
+                        left = r.left + r.width / 2 - pw / 2;
+                        top = r.top - ph - 8;
+                        if (top < 8) top = r.bottom + 8;
+                    }
+                    left = Math.max(8, Math.min(left, vw - pw - 8));
+                    top = Math.max(8, Math.min(top, vh - ph - 8));
+                    panel.style.left = Math.round(left) + 'px';
+                    panel.style.top = Math.round(top) + 'px';
+                } catch (e) {}
+            }
+
+            // 按消息对象找回当前文档里的气泡（长按过程中可能刚好重渲染）
+            function findBubbleForMsg(msg) {
+                try {
+                    if (!msg) return null;
+                    var wrappers = document.querySelectorAll('#chatContainer .message-wrapper');
+                    for (var i = wrappers.length - 1; i >= 0; i--) {
+                        if (String(wrappers[i].dataset.id) === String(msg.id)) {
+                            var b = wrappers[i].querySelector('.message');
+                            if (b) return b;
+                        }
+                    }
+                } catch (e) {}
+                return null;
+            }
+
+            function openReactionPanel(msg, anchor) {
+                try {
+                    if (!msg || msg.recalled) return;
+                    if (anchor && anchor.isConnected === false) anchor = findBubbleForMsg(msg);
+                    var panel = ensureReactionPanel();
+                    mrpMsg = msg;
+                    mrpAnchor = anchor || null;
+                    // emoji 库（去重 + 过滤脏数据）
+                    var lib = (typeof emojiReplies !== 'undefined' && Array.isArray(emojiReplies)) ? emojiReplies : [];
+                    var seen = {}, uniq = [];
+                    for (var i = 0; i < lib.length; i++) {
+                        var em = lib[i];
+                        if (typeof em !== 'string' || !em) continue;
+                        if (seen[em]) continue;
+                        seen[em] = 1;
+                        uniq.push(em);
+                    }
+                    var mineMap = {};
+                    var myList = Array.isArray(msg.reactions) ? msg.reactions : [];
+                    for (var j = 0; j < myList.length; j++) {
+                        if (myList[j] && myList[j].by === 'me' && myList[j].emoji) mineMap[myList[j].emoji] = 1;
+                    }
+                    var row = panel.querySelector('.mrp-emoji-row');
+                    row.innerHTML = '';
+                    if (uniq.length === 0) {
+                        var empty = document.createElement('div');
+                        empty.className = 'mrp-empty';
+                        empty.textContent = '表情库为空';
+                        row.appendChild(empty);
+                    } else {
+                        for (var k = 0; k < uniq.length; k++) {
+                            (function (emoji) {
+                                var b = document.createElement('button');
+                                b.type = 'button';
+                                b.className = 'mrp-emoji' + (mineMap[emoji] ? ' selected' : '');
+                                b.textContent = emoji;
+                                b.addEventListener('click', function (ev) {
+                                    ev.stopPropagation();
+                                    ev.preventDefault();
+                                    var target = mrpMsg;
+                                    addMessageReaction(target, emoji);
+                                    closeReactionPanel();
+                                });
+                                row.appendChild(b);
+                            })(uniq[k]);
+                        }
+                    }
+                    // 底部操作：自己的消息可以撤回
+                    var acts = panel.querySelector('.mrp-actions');
+                    acts.innerHTML = '';
+                    if (isUserSender(msg.sender)) {
+                        var rb = document.createElement('button');
+                        rb.type = 'button';
+                        rb.className = 'mrp-action danger';
+                        rb.textContent = '撤回';
+                        rb.addEventListener('click', function (ev) {
+                            ev.stopPropagation();
+                            ev.preventDefault();
+                            var target = mrpMsg;
+                            closeReactionPanel();
+                            recallMessage(target);
+                        });
+                        acts.appendChild(rb);
+                    }
+                    var cb = document.createElement('button');
+                    cb.type = 'button';
+                    cb.className = 'mrp-action';
+                    cb.textContent = '取消';
+                    cb.addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        ev.preventDefault();
+                        closeReactionPanel();
+                    });
+                    acts.appendChild(cb);
+                    panel.style.left = '8px';
+                    panel.style.top = '8px';
+                    panel.style.display = 'block';
+                    void panel.offsetWidth;   // 先上屏再加 .show，保证淡入动画生效
+                    panel.classList.add('show');
+                    positionReactionPanel(panel, anchor);
+                } catch (e) { try { closeReactionPanel(); } catch (e2) {} }
+            }
+            window.openMessageReactionPanel = openReactionPanel;
+
+            // 事件委托：气泡是每次渲染重建的，所以在 chatContainer 上只绑一次
+            function initMessageLongPress() {
+                try {
+                    var root = document.getElementById('chatContainer');
+                    if (!root || root.dataset.mrpBound === '1') return;
+                    root.dataset.mrpBound = '1';
+                    var startPress = function (e) {
+                        if (e.button !== undefined && e.button > 0) return;   // 鼠标右键不参与
+                        var t = e.target;
+                        var bubble = (t && t.closest) ? t.closest('.message') : null;
+                        if (!bubble) return;
+                        var wrap = bubble.closest ? bubble.closest('.message-wrapper') : null;
+                        if (!wrap) return;
+                        var msg = findMessageByWrapper(wrap);
+                        if (!msg || msg.recalled) return;
+                        var pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+                        mrpPressX = pt.clientX || 0;
+                        mrpPressY = pt.clientY || 0;
+                        if (mrpPressTimer) clearTimeout(mrpPressTimer);
+                        mrpPressTimer = setTimeout(function () {
+                            mrpPressTimer = null;
+                            mrpSuppressClickUntil = Date.now() + 800;
+                            try { if (navigator.vibrate) navigator.vibrate(12); } catch (err) {}
+                            // 长按期间列表可能已重渲染：锚点脱离文档时按 id 找回新气泡
+                            var live = (bubble && bubble.isConnected === false) ? findBubbleForMsg(msg) : bubble;
+                            openReactionPanel(msg, live || bubble);
+                        }, MRP_LONG_PRESS_MS);
+                    };
+                    var cancelPress = function () {
+                        if (mrpPressTimer) { clearTimeout(mrpPressTimer); mrpPressTimer = null; }
+                    };
+                    var movePress = function (e) {
+                        if (!mrpPressTimer) return;
+                        var pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+                        if (Math.abs((pt.clientX || 0) - mrpPressX) > 10 || Math.abs((pt.clientY || 0) - mrpPressY) > 10) cancelPress();
+                    };
+                    if (window.PointerEvent) {
+                        root.addEventListener('pointerdown', startPress, { passive: true });
+                        root.addEventListener('pointermove', movePress, { passive: true });
+                        root.addEventListener('pointerup', cancelPress, { passive: true });
+                        root.addEventListener('pointercancel', cancelPress, { passive: true });
+                        root.addEventListener('pointerleave', cancelPress, { passive: true });
+                    } else {
+                        root.addEventListener('touchstart', startPress, { passive: true });
+                        root.addEventListener('touchmove', movePress, { passive: true });
+                        root.addEventListener('touchend', cancelPress, { passive: true });
+                        root.addEventListener('touchcancel', cancelPress, { passive: true });
+                        root.addEventListener('mousedown', startPress);
+                        root.addEventListener('mousemove', movePress);
+                        root.addEventListener('mouseup', cancelPress);
+                    }
+                    // 长按后不弹出系统菜单（图片保存/文字选择）
+                    root.addEventListener('contextmenu', function (e) {
+                        var t = e.target;
+                        if (!t || !t.closest || !t.closest('.message')) return;
+                        if (mrpMsg || Date.now() < mrpSuppressClickUntil) e.preventDefault();
+                    });
+                    // 长按触发后吞掉紧随其后的 click：单击操作栏、双击看大图都不受影响
+                    document.addEventListener('click', function (e) {
+                        if (Date.now() >= mrpSuppressClickUntil) return;
+                        var t = e.target;
+                        if (t && t.closest && t.closest('#msgReactionPanel')) return;
+                        mrpSuppressClickUntil = 0;
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }, true);
+                    // 点空白 / 滚动聊天区关闭面板
+                    document.addEventListener('pointerdown', function (e) {
+                        if (!mrpMsg) return;
+                        var panel = document.getElementById('msgReactionPanel');
+                        var t = e.target;
+                        if (panel && t && panel.contains(t)) return;
+                        if (mrpAnchor && t && mrpAnchor.contains && mrpAnchor.contains(t)) return;
+                        closeReactionPanel();
+                    }, true);
+                    root.addEventListener('scroll', function () { if (mrpMsg) closeReactionPanel(); }, { passive: true });
+                } catch (e) {}
+            }
+            initMessageLongPress();
 
             // ===== 消息操作 =====
             // 让最新消息始终可见：发消息、收消息、键盘弹出/收起、窗口尺寸变化都会把聊天滚到底
@@ -9065,6 +9543,29 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             if (typeof trackTimer === 'function') trackTimer(setInterval(partnerRandomFavorites, 8 * 60 * 1000));
             setTimeout(partnerRandomFavorites, 20000);
             window.partnerRandomFavorites = partnerRandomFavorites;
+            // 梦角随机撤回：纯随机概率（无冷却、无计时），每次 tick 掷一次骰子，
+            // 命中的话从「自己发的、未撤回的、最近 50 条」里随机挑一条标记撤回。
+            const PARTNER_RECALL_CHANCE = 0.06;
+            function partnerMaybeRecallMessage(chance) {
+                try {
+                    if (settings.isBlocked) return false;
+                    const p = (typeof chance === 'number') ? chance : PARTNER_RECALL_CHANCE;
+                    if (!(Math.random() < p)) return false;
+                    const recent = messages.slice(-50);
+                    const cands = recent.filter(m => m && !m.recalled && m.type !== 'system' &&
+                        isPartnerSender(m.sender) && (m.text || m.image || m.redPacket || m.product));
+                    if (cands.length === 0) return false;
+                    const pick = cands[Math.floor(Math.random() * cands.length)];
+                    pick.recalled = true;
+                    pick.recalledAt = Date.now();
+                    pick.text = '';
+                    pick.image = '';
+                    requestRender();
+                    saveData();
+                    return true;
+                } catch (e) { return false; }
+            }
+            window.partnerMaybeRecallMessage = partnerMaybeRecallMessage;
             function addMessage(msg) {
                 if (!msg.timestamp) msg.timestamp = new Date();
                 if (!msg.id) msg.id = Date.now() + Math.random();
@@ -9144,6 +9645,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             function simulateReply() {
+                try { partnerMaybeRecallMessage(); } catch (e) {}
                 if (settings.isBlocked) return;
                 // 梦角随机发红包（祝福语来自红包祝福语库）
                 const rpChance = Math.max(0, Math.min(100, numOr(settings.partnerRedPacketChance, 12)));
@@ -9196,6 +9698,7 @@ html[data-theme="dark"] #companyModal .comp-mask { background: rgba(0, 0, 0, 0.4
             }
 
             function partnerAutoSend() {
+                try { partnerMaybeRecallMessage(); } catch (e) {}
                 if (settings.isBlocked || !settings.partnerAutoSend) return;
                 const allPools = [...customReplies, ...kaomojiReplies, ...emojiReplies];
                 if (allPools.length === 0) return;
@@ -12858,6 +13361,7 @@ try { if (window.mm2Show) window.mm2Show(true); } catch (e) {} }
             function startPartnerStatusTimer() {
                 if (partnerStatusTimer) clearInterval(partnerStatusTimer);
                 partnerStatusTimer = setInterval(() => {
+                    try { partnerMaybeRecallMessage(); } catch (e) {}
                     if (settings.isBlocked) return;
                     if (Math.random() < 0.7) partnerRandomizeStatus(true);
                 }, 90000);
@@ -27810,7 +28314,7 @@ window.avatarLibDebug = { swap: force => avlMaybeSwap(force), data: () => avlDat
   }catch(e){}
 })();
 </script>
-<script>/* ===== 把「拍一拍」换成「表情包」（显示 memeReplies 里的表情） ===== */
+<script>/* ===== 把「拍一拍」换成「表情包」（显示 memeReplies 里的表情） ===== */</script>
 <script>
 (function () {
     function stickers() {
